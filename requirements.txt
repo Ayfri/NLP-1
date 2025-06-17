@@ -5,6 +5,7 @@ numpy>=2.3.0
 # NLP libraries
 spacy==3.8.7
 nltk==3.9.1
+textblob>=0.17.1
 
 # Text preprocessing
 scikit-learn>=1.7.0
