@@ -90,8 +90,6 @@ CSV files should contain the following columns:
 nlp-2/
 ├── data/              # Input CSV files
 ├── output/            # Processing results
-├── models/            # Models (empty)
-├── utils/             # Utilities (empty)
 ├── main.py            # Main processing script
 ├── requirements.txt   # Python dependencies
 └── README.md          # This file
