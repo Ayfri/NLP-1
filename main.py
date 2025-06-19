@@ -10,7 +10,7 @@ from pathlib import Path
 import logging
 import re
 from datetime import datetime
-from collections import Counter
+from collections import Counter, defaultdict
 
 # NLP imports
 import spacy
@@ -21,7 +21,11 @@ from nltk.sentiment import SentimentIntensityAnalyzer
 from textblob import TextBlob
 import sklearn.feature_extraction.text
 from sklearn.feature_extraction.text import TfidfVectorizer
-from collections import defaultdict
+
+# Visualization imports (from TP1)
+import matplotlib.pyplot as plt
+import seaborn as sns
+import json
 
 # ================================
 # CONSTANTS - Configuration
@@ -81,12 +85,60 @@ STATS_TOP_LEMMAS = 20
 
 # Emotion analysis configuration
 EMOTION_LEXICON_FR = {
-	'positif': ['heureux', 'content', 'joie', 'génial', 'super', 'cool', 'bien', 'bon', 'excellent', 'parfait', 'magnifique', 'formidable', 'merveilleux', 'fantastique', 'extraordinaire', 'mdr', 'lol', 'hilarant', 'marrant', 'rigolo'],
-	'négatif': ['triste', 'énervé', 'colère', 'mal', 'mauvais', 'nul', 'merde', 'chiant', 'pénible', 'agaçant', 'frustrant', 'horrible', 'terrible', 'affreux', 'catastrophique', 'problème', 'erreur', 'bug'],
-	'surprise': ['wow', 'incroyable', 'surprenant', 'étonnant', 'impressionnant', 'ouf', 'waouh', 'dingue', 'fou', 'bizarre', 'étrange'],
-	'peur': ['peur', 'angoisse', 'stress', 'inquiet', 'crainte', 'effrayer', 'terroriser', 'paniquer'],
-	'dégoût': ['dégoût', 'beurk', 'dégueulasse', 'écœurant', 'répugnant', 'horrible', 'ignoble'],
-	'confiance': ['confiance', 'sûr', 'certain', 'évident', 'clair', 'précis', 'exact', 'fiable', 'crédible']
+	'positif': [
+		# Mots formels
+		'heureux', 'content', 'joie', 'génial', 'super', 'cool', 'bien', 'bon', 'excellent',
+		'parfait', 'magnifique', 'formidable', 'merveilleux', 'fantastique', 'extraordinaire',
+		# Expressions Discord/Internet
+		'mdr', 'lol', 'ptdr', 'xD', 'hilarant', 'marrant', 'rigolo', 'drôle', 'fun',
+		'top', 'nickel', 'stylé', 'classe', 'ouf', 'trop bien', 'grave cool', 'bg',
+		'gg', 'wp', 'nice', 'ez', 'poggers', 'pog', 'lets go', 'yay', 'yes', 'yess',
+		# Emojis textuels
+		':)', '^^', ':D', '=)', ':3', 'x)'
+	],
+	'négatif': [
+		# Mots formels
+		'triste', 'énervé', 'colère', 'mal', 'mauvais', 'nul', 'problème', 'erreur', 'bug',
+		'pénible', 'agaçant', 'frustrant', 'horrible', 'terrible', 'affreux', 'catastrophique',
+		# Expressions familières
+		'merde', 'putain', 'chiant', 'relou', 'galère', 'bordel', 'fait chier', 'ras le bol',
+		'saoulé', 'soûle', 'gavé', 'blasé', 'dégoûté', 'deg', 'la flemme', 'chaud',
+		'rip', 'dead', 'mort', 'tué', 'fini', 'cramé', 'naze', 'pourri',
+		# Emojis textuels
+		':(', ':/', ':|', 'T_T', '-_-', '>_<'
+	],
+	'surprise': [
+		'wow', 'waouh', 'woah', 'omg', 'wtf', 'quoi', 'sérieux', 'vraiment',
+		'incroyable', 'surprenant', 'étonnant', 'impressionnant', 'ouf',
+		'dingue', 'fou', 'malade', 'bizarre', 'étrange', 'chelou', 'louche',
+		'jamais vu', 'première fois', 'ah bon', 'oh', 'ah', 'hein', 'pardon',
+		'o_O', 'O_o', ':O', 'D:'
+	],
+	'peur': [
+		'peur', 'angoisse', 'stress', 'inquiet', 'crainte', 'effrayer', 'terroriser',
+		'paniquer', 'flipper', 'psychoter', 'bad', 'tendu', 'chaud', 'risqué',
+		'dangereux', 'attention', 'careful', 'méfie', 'gaffe'
+	],
+	'colère': [
+		'rage', 'rageux', 'tilt', 'tilté', 'salé', 'salty', 'vénère', 'vnr',
+		'furieux', 'furax', 'enragé', 'péter un câble', 'péter un plomb',
+		'exploser', 'craquer', 'foutre', 'casser', 'détruire', 'taper'
+	],
+	'dégoût': [
+		'dégoût', 'beurk', 'berk', 'dégueulasse', 'dégueu', 'écœurant', 'répugnant',
+		'horrible', 'ignoble', 'immonde', 'crade', 'sale', 'pourri', 'moisi',
+		'gerber', 'vomir', 'nausée', 'bleh', 'eurk', 'yuck'
+	],
+	'confiance': [
+		'confiance', 'sûr', 'certain', 'évident', 'clair', 'précis', 'exact',
+		'fiable', 'crédible', 'garanti', 'promis', 'juré', 'validé', 'confirmé',
+		'approuvé', 'ok', 'okay', 'ça marche', 'nickel', 'parfait', 'impec'
+	],
+	'espoir': [
+		'espoir', 'espérer', 'souhaiter', 'vouloir', 'rêver', 'imaginer',
+		'peut-être', 'possible', 'potentiel', 'chance', 'opportunité',
+		'bientôt', 'prochainement', 'futur', 'avenir', 'projet'
+	]
 }
 
 # Conversation grouping parameters (messages within X minutes = same conversation)
@@ -166,6 +218,55 @@ class DiscordNLPProcessor:
 				logger.error("❌ No spaCy model found. Install with: python -m spacy download fr_core_news_sm")
 				raise
 
+	def extract_discord_features(self, text: str) -> dict:
+		"""Extract Discord-specific features from text (inspired by TP1)"""
+		features = {}
+
+		default_features = {
+			'caps_ratio': 0,
+			'exclamation_count': 0,
+			'question_count': 0,
+			'mention_count': 0,
+			'emoji_count': 0,
+			'code_block_count': 0,
+			'url_count': 0,
+			'message_length': 0,
+			'word_count': 0,
+			'avg_word_length': 0
+		}
+
+		# Handle NaN, None, or non-string values
+		if pd.isna(text) or text is None or not isinstance(text, str):
+			return default_features
+
+		# Convert to string if not already
+		text = str(text)
+
+		if not text:
+			return default_features
+
+		# Ratio of capital letters (excitement/shouting indicator)
+		caps_count = sum(1 for char in text if char.isupper())
+		features['caps_ratio'] = caps_count / len(text) if len(text) > 0 else 0
+
+		# Punctuation counts
+		features['exclamation_count'] = text.count('!')
+		features['question_count'] = text.count('?')
+
+		# Discord-specific patterns
+		features['mention_count'] = len(re.findall(r'@\w+', text))
+		features['emoji_count'] = len(re.findall(r':\w+:', text)) + len(re.findall(r'<a?:\w+:\d+>', text))
+		features['code_block_count'] = len(re.findall(r'```', text))
+		features['url_count'] = len(re.findall(r'https?://\S+', text))
+
+		# Text statistics
+		features['message_length'] = len(text)
+		words = text.split()
+		features['word_count'] = len(words)
+		features['avg_word_length'] = sum(len(w) for w in words) / len(words) if words else 0
+
+		return features
+
 	def clean_text(self, text: str) -> str:
 		"""Enhanced text cleaning with better French support"""
 		if pd.isna(text) or text == "":
@@ -175,7 +276,33 @@ class DiscordNLPProcessor:
 		text = re.sub(r'<@!?\d+>', '', text)
 		text = re.sub(r'@\w+(?:#\d{4})?', '', text)
 
-		# Remove Discord emojis (:emoji:) and custom emojis
+		# Remove Discord emojis (:emoji:) and custom emojis but preserve text emoticons
+		# First, preserve text emoticons by replacing them temporarily
+		emoticon_mapping = {
+			':)': '__HAPPY__',
+			':D': '__VERYHAPPY__',
+			':(': '__SAD__',
+			':/': '__UNSURE__',
+			':|': '__NEUTRAL__',
+			'^^': '__HAPPY2__',
+			'=)': '__HAPPY3__',
+			':3': '__CUTE__',
+			'T_T': '__CRY__',
+			'-_-': '__ANNOYED__',
+			'>_<': '__FRUSTRATED__',
+			'o_O': '__SURPRISED__',
+			'O_o': '__SURPRISED2__',
+			':O': '__SHOCKED__',
+			'D:': '__DISMAY__',
+			'xD': '__LAUGH__',
+			'XD': '__LAUGH2__',
+			'x)': '__LAUGH3__',
+		}
+
+		for emoticon, placeholder in emoticon_mapping.items():
+			text = text.replace(emoticon, placeholder)
+
+		# Now remove Discord emojis
 		text = re.sub(r':\w+:', '', text)
 		text = re.sub(r'<a?:\w+:\d+>', '', text)
 
@@ -191,6 +318,10 @@ class DiscordNLPProcessor:
 
 		# Remove special characters but keep basic punctuation and accents
 		text = re.sub(r'[^\w\s.,!?;:\-àáâäçèéêëìíîïñòóôöùúûüÿæœÀÁÂÄÇÈÉÊËÌÍÎÏÑÒÓÔÖÙÚÛÜŸÆŒ]', '', text)
+
+		# Restore emoticons
+		for emoticon, placeholder in emoticon_mapping.items():
+			text = text.replace(placeholder, emoticon)
 
 		# Clean up multiple spaces and normalize whitespace
 		text = re.sub(r'\s+', ' ', text)
@@ -308,6 +439,9 @@ class DiscordNLPProcessor:
 
 	def process_message(self, text: str) -> dict:
 		"""Process a single message through the enhanced NLP pipeline"""
+		# Extract Discord features BEFORE cleaning (like in TP1)
+		discord_features = self.extract_discord_features(text)
+
 		cleaned_text = self.clean_text(text)
 		tokens = self.tokenize_text(cleaned_text)
 		filtered_tokens = self.remove_stopwords(tokens)
@@ -322,7 +456,8 @@ class DiscordNLPProcessor:
 			'filtered_tokens': filtered_tokens,
 			'lemmas': lemmas,
 			'processed_text': ' '.join(lemmas),
-			'emotions': emotions
+			'emotions': emotions,
+			'discord_features': discord_features
 		}
 
 
@@ -528,9 +663,11 @@ def group_conversations(df: pd.DataFrame) -> list[dict]:
 
 def analyze_conversation(conversation: dict) -> dict:
 	"""Analyze a single conversation for emotions, topics, and generate summary"""
-	messages_text = [msg['processed_text'] for msg in conversation['messages'] if msg['processed_text']]
+	# Use original cleaned content for better context
+	messages_cleaned = [msg['cleaned_content'] for msg in conversation['messages'] if msg['cleaned_content']]
+	messages_processed = [msg['processed_text'] for msg in conversation['messages'] if msg['processed_text']]
 
-	if not messages_text:
+	if not messages_cleaned:
 		return {
 			'summary': 'Conversation vide',
 			'title': 'Conversation sans contenu',
@@ -540,8 +677,9 @@ def analyze_conversation(conversation: dict) -> dict:
 			'sentiment_trend': 'neutral'
 		}
 
-	# Combine all processed text
-	combined_text = ' '.join(messages_text)
+	# Combine all text for analysis
+	combined_cleaned = ' '.join(messages_cleaned)
+	combined_processed = ' '.join(messages_processed)
 
 	# Extract emotions from all messages
 	all_emotions = []
@@ -578,55 +716,265 @@ def analyze_conversation(conversation: dict) -> dict:
 	else:
 		sentiment_trend = 'neutral'
 
-	# Extract key topics using TF-IDF
+	# Define French stopwords to filter out
+	french_stopwords_extended = {
+		'le', 'la', 'les', 'un', 'une', 'des', 'de', 'du', 'ce', 'cet', 'cette', 'ces',
+		'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses', 'notre', 'nos', 'votre', 'vos', 'leur', 'leurs',
+		'je', 'tu', 'il', 'elle', 'on', 'nous', 'vous', 'ils', 'elles',
+		'être', 'avoir', 'faire', 'dire', 'aller', 'voir', 'savoir', 'pouvoir', 'vouloir',
+		'est', 'es', 'sommes', 'êtes', 'sont', 'était', 'étaient', 'été',
+		'ai', 'as', 'a', 'avons', 'avez', 'ont', 'avait', 'avaient', 'eu',
+		'fais', 'fait', 'faisons', 'faites', 'font', 'faisait', 'faisaient',
+		'dis', 'dit', 'disons', 'dites', 'disent', 'disait', 'disaient',
+		'vais', 'vas', 'va', 'allons', 'allez', 'vont', 'allait', 'allaient',
+		'que', 'qui', 'quoi', 'où', 'quand', 'comment', 'pourquoi',
+		'et', 'ou', 'mais', 'donc', 'or', 'ni', 'car', 'si',
+		'à', 'de', 'par', 'pour', 'avec', 'sans', 'sous', 'sur', 'dans', 'en', 'vers', 'chez',
+		'ne', 'pas', 'plus', 'moins', 'très', 'trop', 'assez', 'peu', 'beaucoup',
+		'ce est', 'cela', 'ça', 'ceci', 'celui', 'celle', 'ceux', 'celles',
+		'y', 'lui', 'se', 'me', 'te', 'nous', 'vous', 'leur',
+		'alors', 'ainsi', 'après', 'avant', 'aussi', 'comme', 'depuis', 'encore', 'enfin',
+		'même', 'peut', 'tout', 'tous', 'toute', 'toutes'
+	}
+
+	# Extract key topics using TF-IDF on cleaned content with better filtering
 	try:
+		# Custom analyzer to filter stopwords
+		def custom_analyzer(text):
+			words = re.findall(r'\b[a-zA-ZÀ-ÿ]+\b', text.lower())
+			# Filter stopwords and short words
+			return [w for w in words if w not in french_stopwords_extended and len(w) > 2]
+
 		vectorizer = TfidfVectorizer(
-			max_features=10,
-			stop_words=None,  # We already processed the text
-			ngram_range=(1, 2)
+			max_features=30,
+			ngram_range=(1, 3),
+			min_df=1,
+			analyzer=custom_analyzer
 		)
-		tfidf_matrix = vectorizer.fit_transform([combined_text])
-		feature_names = vectorizer.get_feature_names_out()
-		scores = tfidf_matrix.toarray()[0]
 
-		# Get top scoring terms
-		term_scores = list(zip(feature_names, scores))
-		term_scores.sort(key=lambda x: x[1], reverse=True)
-		key_topics = [term for term, score in term_scores[:MAX_TITLE_WORDS] if score > 0]
+		# Analyze each message separately to find most relevant terms
+		if len(messages_cleaned) > 1:
+			tfidf_matrix = vectorizer.fit_transform(messages_cleaned)
+			feature_names = vectorizer.get_feature_names_out()
+
+			# Get average TF-IDF scores across all messages
+			avg_scores = tfidf_matrix.mean(axis=0).A1
+			term_scores = list(zip(feature_names, avg_scores))
+			term_scores.sort(key=lambda x: x[1], reverse=True)
+
+			# Filter to get meaningful topics
+			key_topics = []
+			for term, score in term_scores:
+				# Additional filtering for quality
+				if score > 0.05 and not any(word in french_stopwords_extended for word in term.split()):
+					key_topics.append(term)
+					if len(key_topics) >= 10:
+						break
+		else:
+			# For single message, extract nouns and important words
+			words = custom_analyzer(combined_cleaned)
+			word_counts = Counter(words)
+			key_topics = [word for word, count in word_counts.most_common(10)]
+
 	except:
-		# Fallback to most common words
-		words = combined_text.split()
-		word_counts = Counter(words)
-		key_topics = [word for word, count in word_counts.most_common(MAX_TITLE_WORDS)]
+		# Fallback to noun extraction from processed text
+		words = combined_processed.split()
+		# Filter common words and keep only substantive terms
+		substantive_words = []
+		for word in words:
+			if len(word) > 3 and word.lower() not in french_stopwords_extended:
+				substantive_words.append(word)
+		word_counts = Counter(substantive_words)
+		key_topics = [word for word, count in word_counts.most_common(10)]
 
-	# Generate summary (extractive approach - take most representative sentences)
-	original_messages = [msg['cleaned_content'] for msg in conversation['messages']
-						if msg['cleaned_content'] and len(msg['cleaned_content']) > 10]
-
-	if len(original_messages) <= 3:
-		summary = ' | '.join(original_messages[:3])
+	# Generate better summary - extract most informative messages
+	if len(messages_cleaned) <= 3:
+		summary = ' | '.join(messages_cleaned[:3])
 	else:
-		# Take first, middle, and last message as summary
-		summary = f"{original_messages[0]} | {original_messages[len(original_messages)//2]} | {original_messages[-1]}"
+		# Find messages with highest information content
+		message_scores = []
+		for i, msg in enumerate(messages_cleaned):
+			# Score based on length, keywords, and position
+			words = msg.lower().split()
+			score = len([w for w in words if len(w) > 3])  # Meaningful word count
 
-	# Generate title from key topics and context
+			# Keyword relevance score
+			for topic in key_topics[:5]:
+				if topic.lower() in msg.lower():
+					score += 10
+
+			# Position score (first and last messages are important)
+			if i == 0 or i == len(messages_cleaned) - 1:
+				score += 5
+
+			# Emotion content score
+			if any(emotion_word in msg.lower() for emotion_list in EMOTION_LEXICON_FR.values() for emotion_word in emotion_list):
+				score += 3
+
+			message_scores.append((i, score, msg))
+
+		# Sort by score and select top messages
+		message_scores.sort(key=lambda x: x[1], reverse=True)
+		selected_messages = sorted([msg for i, score, msg in message_scores[:3]],
+								   key=lambda msg: messages_cleaned.index(msg))
+		summary = ' | '.join(selected_messages)
+
+	# Generate more descriptive title based on key topics and content
 	if key_topics:
-		title = f"Discussion sur {' '.join(key_topics[:3])}"
-		if dominant_emotion != 'neutral':
-			title += f" ({dominant_emotion})"
+		# Prioritize multi-word phrases as they're more descriptive
+		multiword_topics = [t for t in key_topics if ' ' in t]
+		single_word_topics = [t for t in key_topics if ' ' not in t]
+
+		# Build title from most relevant terms
+		title_components = []
+
+		# Add multi-word phrases first (more specific)
+		for topic in multiword_topics[:2]:
+			title_components.append(topic)
+
+		# Add single words if needed
+		if len(title_components) < 3:
+			for topic in single_word_topics:
+				if topic not in ' '.join(title_components):  # Avoid repetition
+					title_components.append(topic)
+					if len(title_components) >= 3:
+						break
+
+		if title_components:
+			# Create a natural title
+			title = ' '.join(title_components[:3])
+			# Capitalize first letter
+			title = title[0].upper() + title[1:] if title else title
+		else:
+			# Extract key subject from first message
+			first_msg_words = messages_cleaned[0].split()
+			meaningful = [w for w in first_msg_words if len(w) > 4 and w.lower() not in french_stopwords_extended]
+			title = ' '.join(meaningful[:3]) if meaningful else f"Conv. {conversation['conversation_id']}"
 	else:
-		title = f"Conversation {conversation['conversation_id']} ({dominant_emotion})"
+		# Last resort - use beginning of first message
+		first_words = messages_cleaned[0].split()[:8]
+		title = ' '.join(first_words)
+
+	# Add conversation metadata to title
+	if len(conversation['participants']) > 3:
+		title = f"[Groupe {len(conversation['participants'])}] {title}"
+	elif len(conversation['participants']) > 2:
+		title = f"[Groupe] {title}"
+
+	# Add emotion indicator if strong
+	if emotion_counts and max(emotion_counts.values()) >= 3:
+		title = f"{title} [{dominant_emotion}]"
+
+	# Trim summary if too long
+	if len(summary) > 500:
+		summary = summary[:497] + '...'
 
 	return {
-		'summary': summary[:500] + '...' if len(summary) > 500 else summary,
-		'title': title,
+		'summary': summary,
+		'title': title[:100],  # Limit title length
 		'dominant_emotion': dominant_emotion,
 		'emotion_distribution': emotion_distribution,
-		'key_topics': key_topics,
+		'key_topics': key_topics[:MAX_TITLE_WORDS],
 		'sentiment_trend': sentiment_trend,
 		'participant_count': len(conversation['participants']),
 		'duration_minutes': (conversation['end_time'] - conversation['start_time']).total_seconds() / 60
 	}
+
+
+def visualize_conversation_emotions(conversations: list[dict], output_dir: Path):
+	"""Visualize emotion distribution across conversations"""
+	logger.info("📊 Creating emotion visualizations...")
+
+	# Collect emotion data
+	all_emotions = []
+	for conv in conversations:
+		if 'dominant_emotion' in conv:
+			all_emotions.append(conv['dominant_emotion'])
+
+	if not all_emotions:
+		logger.warning("No emotion data to visualize")
+		return
+
+	# Count emotions
+	emotion_counts = Counter(all_emotions)
+
+	# Create pie chart
+	plt.figure(figsize=(10, 8))
+	colors = {
+		'positif': '#5865F2',  # Discord blue
+		'négatif': '#ED4245',  # Discord red
+		'surprise': '#FEE75C',  # Discord yellow
+		'peur': '#EB459E',  # Discord pink
+		'colère': '#F47B67',  # Discord orange
+		'dégoût': '#5865F2',  # Discord purple
+		'confiance': '#57F287',  # Discord green
+		'espoir': '#3BA55C',  # Discord light green
+		'neutral': '#747F8D'  # Discord gray
+	}
+
+	plt.pie(
+		emotion_counts.values(),
+		labels=emotion_counts.keys(),
+		autopct='%1.1f%%',
+		colors=[colors.get(e, '#747F8D') for e in emotion_counts.keys()],
+		startangle=90
+	)
+
+	plt.title('Distribution des émotions dominantes dans les conversations', fontsize=16)
+
+	output_path = output_dir / 'emotion_distribution.png'
+	plt.savefig(output_path, bbox_inches='tight')
+	plt.close()
+
+	logger.info(f"✅ Emotion visualization saved to {output_path}")
+
+
+
+
+
+def create_analysis_report(processed_df: pd.DataFrame, conversations: list[dict], output_dir: Path):
+	"""Create a comprehensive analysis report with visualizations"""
+	logger.info("📝 Creating comprehensive analysis report...")
+
+	report_content = []
+	report_content.append("# Rapport d'analyse des conversations Discord\n")
+	report_content.append(f"Date de génération: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+	# General statistics
+	report_content.append("## Statistiques générales\n")
+	report_content.append(f"- Nombre total de messages: {len(processed_df)}\n")
+	report_content.append(f"- Nombre de conversations: {len(conversations)}\n")
+	report_content.append(f"- Nombre de participants uniques: {processed_df['Author'].nunique()}\n")
+
+	# Top participants
+	top_authors = processed_df['Author'].value_counts().head(10)
+	report_content.append("\n## Top 10 des participants les plus actifs\n")
+	for author, count in top_authors.items():
+		report_content.append(f"- {author}: {count} messages\n")
+
+	# Emotion analysis
+	emotion_counts = Counter(conv.get('dominant_emotion', 'neutral') for conv in conversations)
+	report_content.append("\n## Analyse des émotions\n")
+	for emotion, count in emotion_counts.most_common():
+		percentage = (count / len(conversations)) * 100
+		report_content.append(f"- {emotion}: {count} conversations ({percentage:.1f}%)\n")
+
+	# Most discussed topics
+	all_topics = []
+	for conv in conversations:
+		all_topics.extend(conv.get('key_topics', []))
+	topic_counts = Counter(all_topics)
+
+	report_content.append("\n## Sujets les plus discutés\n")
+	for topic, count in topic_counts.most_common(20):
+		report_content.append(f"- {topic}: {count} occurrences\n")
+
+	# Save report
+	report_path = output_dir / 'analysis_report.md'
+	with open(report_path, 'w', encoding='utf-8') as f:
+		f.writelines(report_content)
+
+	logger.info(f"✅ Analysis report saved to {report_path}")
 
 
 def main():
@@ -675,23 +1023,6 @@ def main():
 		conversation_analysis_df.to_csv(conversation_analysis_file, index=False)
 		logger.info(f"✅ Conversation analysis saved to {conversation_analysis_file}")
 
-		# Save detailed conversations
-		detailed_conversations_file = output_path / 'detailed_conversations.json'
-		import json
-		with open(detailed_conversations_file, 'w', encoding='utf-8') as f:
-			# Convert datetime objects to strings for JSON serialization
-			conversations_for_json = []
-			for conv in conversations:
-				conv_copy = conv.copy()
-				conv_copy['start_time'] = conv_copy['start_time'].isoformat()
-				conv_copy['end_time'] = conv_copy['end_time'].isoformat()
-				for msg in conv_copy['messages']:
-					msg['Date'] = msg['Date'].isoformat()
-				conversations_for_json.append(conv_copy)
-
-			json.dump(conversations_for_json, f, ensure_ascii=False, indent=2)
-		logger.info(f"✅ Detailed conversations saved to {detailed_conversations_file}")
-
 		# Print summary statistics
 		logger.info("📈 Conversation Analysis Summary:")
 		logger.info(f"  Total conversations: {len(conversations)}")
@@ -703,6 +1034,16 @@ def main():
 			sentiments = [conv['sentiment_trend'] for conv in conversation_analysis]
 			sentiment_counts = Counter(sentiments)
 			logger.info(f"  Sentiment trends: {dict(sentiment_counts)}")
+
+		# Generate visualizations
+		logger.info("🎨 Generating visualizations...")
+		output_path = Path(OUTPUT_DIR)
+
+		# Visualize emotion distribution
+		visualize_conversation_emotions(conversation_analysis, output_path)
+
+		# Create analysis report
+		create_analysis_report(processed_df, conversation_analysis, output_path)
 
 		logger.info("🎉 Processing completed successfully!")
 

@@ -6,13 +6,14 @@ numpy>=2.3.0
 spacy==3.8.7
 nltk==3.9.1
 textblob>=0.17.1
+scikit-learn>=1.3.0
 
-# Text preprocessing
-scikit-learn>=1.7.0
-
-# Visualization
-matplotlib>=3.8.0
+# Visualization libraries (from TP1)
+matplotlib>=3.10.3
 seaborn>=0.13.2
+
+# Additional NLP tools
+vaderSentiment>=3.3.2
 
 # Progress bars
 tqdm>=4.67.1
