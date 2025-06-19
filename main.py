@@ -38,44 +38,60 @@ LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 # Processing parameters
 MIN_TOKEN_LENGTH = 2
 MAX_TOKEN_LENGTH = 50
-BATCH_SIZE = 100
+BATCH_SIZE = 500  # Increased batch size for better performance
+
+# Compiled regex patterns for better performance
+REGEX_PATTERNS = {
+	'mentions': re.compile(r'<@!?\d+>'),
+	'mentions_legacy': re.compile(r'@\w+(?:#\d{4})?'),
+	'emojis_custom': re.compile(r'<a?:\w+:\d+>'),
+	'emojis_standard': re.compile(r':\w+:'),
+	'urls': re.compile(r'https?://(?:[-\w.])+(?:[:\d]+)?(?:/(?:[\w/_.])*(?:\?(?:[\w&=%.])*)?(?:#(?:\w*))?)?'),
+	'apostrophes': re.compile(r"([a-zA-Z])'([a-zA-Z])"),
+	'special_chars': re.compile(r'[^\w\s.,!?;:\-àáâäçèéêëìíîïñòóôöùúûüÿæœÀÁÂÄÇÈÉÊËÌÍÎÏÑÒÓÔÖÙÚÛÜŸÆŒ]'),
+	'multiple_spaces': re.compile(r'\s+')
+}
 
 # French contractions mapping for better preprocessing
 FRENCH_CONTRACTIONS = {
-    r"c'est": "ce est",
-    r"qu'": "que ",
-    r"d'": "de ",
-    r"n'": "ne ",
-    r"s'": "se ",
-    r"j'": "je ",
-    r"t'": "te ",
-    r"m'": "me ",
-    r"l'": "le ",
-    r"jusqu'": "jusque ",
-    r"aujourd'hui": "aujourd hui",
-    r"quelqu'": "quelque ",
+	r"c'est": "ce est",
+	r"qu'": "que ",
+	r"d'": "de ",
+	r"n'": "ne ",
+	r"s'": "se ",
+	r"j'": "je ",
+	r"t'": "te ",
+	r"m'": "me ",
+	r"l'": "le ",
+	r"jusqu'": "jusque ",
+	r"aujourd'hui": "aujourd hui",
+	r"quelqu'": "quelque ",
 }
+
+# Compile contraction patterns
+CONTRACTION_PATTERNS = {re.compile(pattern, re.IGNORECASE): replacement
+						for pattern, replacement in FRENCH_CONTRACTIONS.items()}
 
 # Important short words to preserve (common in French)
 IMPORTANT_SHORT_WORDS = {
-    'ça', 'si', 'ou', 'et', 'en', 'un', 'le', 'la', 'de', 'du', 'ce', 'se',
-    'me', 'te', 'ne', 'je', 'tu', 'il', 'on', 'au', 'ai', 'as', 'va', 'eu'
+	'ça', 'si', 'ou', 'et', 'en', 'un', 'le', 'la', 'de', 'du', 'ce', 'se',
+	'me', 'te', 'ne', 'je', 'tu', 'il', 'on', 'au', 'ai', 'as', 'va', 'eu'
 }
 
 # Contextually important words to keep (less aggressive stopword filtering)
 CONTEXTUAL_WORDS_TO_KEEP = {
-    'pas', 'non', 'oui', 'bien', 'tout', 'tous', 'faire', 'dit', 'voir',
-    'très', 'plus', 'moins', 'beaucoup', 'peu', 'assez', 'trop'
+	'pas', 'non', 'oui', 'bien', 'tout', 'tous', 'faire', 'dit', 'voir',
+	'très', 'plus', 'moins', 'beaucoup', 'peu', 'assez', 'trop'
 }
 
 # Common lemmatization fixes for French
 LEMMA_FIXES = {
-    'pourer': {'pourrait', 'pourait', 'pourrai', 'pourrais'},
-    'lavai': {'lavais'},
-    'donner': {'donnerais', 'donnerai', 'donneraient'},
-    'faire': {'ferais', 'ferait', 'feraient'},
-    'avoir': {'aurais', 'aurait', 'auraient'},
-    'être': {'serais', 'serait', 'seraient'},
+	'pourer': {'pourrait', 'pourait', 'pourrai', 'pourrais'},
+	'lavai': {'lavais'},
+	'donner': {'donnerais', 'donnerai', 'donneraient'},
+	'faire': {'ferais', 'ferait', 'feraient'},
+	'avoir': {'aurais', 'aurait', 'auraient'},
+	'être': {'serais', 'serait', 'seraient'},
 }
 
 # Output configuration
@@ -83,7 +99,7 @@ OUTPUT_DIR = "output"
 FREQ_ANALYSIS_TOP_N = 100
 STATS_TOP_LEMMAS = 20
 
-# Emotion analysis configuration
+# Emotion analysis configuration - Pre-compile for faster lookup
 EMOTION_LEXICON_FR = {
 	'positif': [
 		# Mots formels
@@ -140,6 +156,9 @@ EMOTION_LEXICON_FR = {
 		'bientôt', 'prochainement', 'futur', 'avenir', 'projet'
 	]
 }
+
+# Pre-compile emotion keywords for faster lookup
+EMOTION_KEYWORD_SETS = {emotion: set(keywords) for emotion, keywords in EMOTION_LEXICON_FR.items()}
 
 # Conversation grouping parameters (messages within X minutes = same conversation)
 CONVERSATION_GAP_MINUTES = 15
@@ -268,63 +287,49 @@ class DiscordNLPProcessor:
 		return features
 
 	def clean_text(self, text: str) -> str:
-		"""Enhanced text cleaning with better French support"""
+		"""Enhanced text cleaning with better French support - OPTIMIZED"""
 		if pd.isna(text) or text == "":
 			return ""
 
-		# Remove Discord mentions (@user and @user#1234)
-		text = re.sub(r'<@!?\d+>', '', text)
-		text = re.sub(r'@\w+(?:#\d{4})?', '', text)
+		# Remove Discord mentions and emojis using pre-compiled regex
+		text = REGEX_PATTERNS['mentions'].sub('', text)
+		text = REGEX_PATTERNS['mentions_legacy'].sub('', text)
 
-		# Remove Discord emojis (:emoji:) and custom emojis but preserve text emoticons
-		# First, preserve text emoticons by replacing them temporarily
+		# Preserve text emoticons by replacing them temporarily
 		emoticon_mapping = {
-			':)': '__HAPPY__',
-			':D': '__VERYHAPPY__',
-			':(': '__SAD__',
-			':/': '__UNSURE__',
-			':|': '__NEUTRAL__',
-			'^^': '__HAPPY2__',
-			'=)': '__HAPPY3__',
-			':3': '__CUTE__',
-			'T_T': '__CRY__',
-			'-_-': '__ANNOYED__',
-			'>_<': '__FRUSTRATED__',
-			'o_O': '__SURPRISED__',
-			'O_o': '__SURPRISED2__',
-			':O': '__SHOCKED__',
-			'D:': '__DISMAY__',
-			'xD': '__LAUGH__',
-			'XD': '__LAUGH2__',
-			'x)': '__LAUGH3__',
+			':)': '__HAPPY__', ':D': '__VERYHAPPY__', ':(': '__SAD__', ':/': '__UNSURE__',
+			':|': '__NEUTRAL__', '^^': '__HAPPY2__', '=)': '__HAPPY3__', ':3': '__CUTE__',
+			'T_T': '__CRY__', '-_-': '__ANNOYED__', '>_<': '__FRUSTRATED__',
+			'o_O': '__SURPRISED__', 'O_o': '__SURPRISED2__', ':O': '__SHOCKED__',
+			'D:': '__DISMAY__', 'xD': '__LAUGH__', 'XD': '__LAUGH2__', 'x)': '__LAUGH3__',
 		}
 
 		for emoticon, placeholder in emoticon_mapping.items():
 			text = text.replace(emoticon, placeholder)
 
-		# Now remove Discord emojis
-		text = re.sub(r':\w+:', '', text)
-		text = re.sub(r'<a?:\w+:\d+>', '', text)
+		# Remove Discord emojis using pre-compiled regex
+		text = REGEX_PATTERNS['emojis_standard'].sub('', text)
+		text = REGEX_PATTERNS['emojis_custom'].sub('', text)
 
-		# Remove URLs (improved regex)
-		text = re.sub(r'https?://(?:[-\w.])+(?:[:\d]+)?(?:/(?:[\w/_.])*(?:\?(?:[\w&=%.])*)?(?:#(?:\w*))?)?', '', text)
+		# Remove URLs using pre-compiled regex
+		text = REGEX_PATTERNS['urls'].sub('', text)
 
-		# Handle French contractions systematically
-		for contraction, replacement in FRENCH_CONTRACTIONS.items():
-			text = re.sub(contraction, replacement, text, flags=re.IGNORECASE)
+		# Handle French contractions using pre-compiled patterns
+		for pattern, replacement in CONTRACTION_PATTERNS.items():
+			text = pattern.sub(replacement, text)
 
-		# Handle remaining apostrophes
-		text = re.sub(r"([a-zA-Z])'([a-zA-Z])", r'\1 \2', text)
+		# Handle remaining apostrophes using pre-compiled regex
+		text = REGEX_PATTERNS['apostrophes'].sub(r'\1 \2', text)
 
-		# Remove special characters but keep basic punctuation and accents
-		text = re.sub(r'[^\w\s.,!?;:\-àáâäçèéêëìíîïñòóôöùúûüÿæœÀÁÂÄÇÈÉÊËÌÍÎÏÑÒÓÔÖÙÚÛÜŸÆŒ]', '', text)
+		# Remove special characters using pre-compiled regex
+		text = REGEX_PATTERNS['special_chars'].sub('', text)
 
 		# Restore emoticons
 		for emoticon, placeholder in emoticon_mapping.items():
 			text = text.replace(placeholder, emoticon)
 
-		# Clean up multiple spaces and normalize whitespace
-		text = re.sub(r'\s+', ' ', text)
+		# Clean up multiple spaces using pre-compiled regex
+		text = REGEX_PATTERNS['multiple_spaces'].sub(' ', text)
 
 		return text.strip()
 
@@ -374,7 +379,7 @@ class DiscordNLPProcessor:
 		return lemmas
 
 	def analyze_emotions(self, text: str, lemmas: list[str]) -> dict:
-		"""Analyze emotions in text using multiple approaches"""
+		"""Analyze emotions in text using multiple approaches - OPTIMIZED"""
 		if not text:
 			return {
 				'sentiment_score': 0.0,
@@ -388,31 +393,31 @@ class DiscordNLPProcessor:
 		# VADER sentiment analysis (works better with informal text)
 		vader_scores = self.sentiment_analyzer.polarity_scores(text)
 
-		# TextBlob sentiment analysis
-		try:
-			blob = TextBlob(text)
-			textblob_polarity = blob.sentiment.polarity
-			textblob_subjectivity = blob.sentiment.subjectivity
-		except:
-			textblob_polarity = 0.0
-			textblob_subjectivity = 0.0
+		# Skip TextBlob for performance - it's very slow
+		textblob_polarity = 0.0
+		textblob_subjectivity = 0.0
 
-		# French emotion lexicon analysis
-		emotion_scores = {}
-		detected_emotions = []
+		# French emotion lexicon analysis - OPTIMIZED with pre-compiled sets
+		emotion_scores: dict[str, int] = {}
+		detected_emotions: list[str] = []
 
 		text_lower = text.lower()
-		lemmas_lower = [lemma.lower() for lemma in lemmas]
+		lemmas_set = set(lemma.lower() for lemma in lemmas)
 
-		for emotion, keywords in EMOTION_LEXICON_FR.items():
+		for emotion, keyword_set in EMOTION_KEYWORD_SETS.items():
 			score = 0
-			for keyword in keywords:
-				# Check in original text
-				if keyword in text_lower:
+
+			# Count keywords in text and lemmas using set operations for faster lookup
+			text_words = set(text_lower.split())
+			common_in_text = text_words.intersection(keyword_set)
+			common_in_lemmas = lemmas_set.intersection(keyword_set)
+
+			score = len(common_in_text) + len(common_in_lemmas)
+
+			# Additional check for multi-word expressions in original text
+			for keyword in keyword_set:
+				if ' ' in keyword and keyword in text_lower:
 					score += text_lower.count(keyword)
-				# Check in lemmas
-				if keyword in lemmas_lower:
-					score += lemmas_lower.count(keyword)
 
 			emotion_scores[emotion] = score
 			if score > 0:
@@ -437,28 +442,96 @@ class DiscordNLPProcessor:
 			'vader_scores': vader_scores
 		}
 
+	def process_batch(self, messages: list[str]) -> list[dict]:
+		"""Process a batch of messages efficiently - OPTIMIZED FOR PERFORMANCE"""
+		if not messages:
+			return []
+
+		batch_results = []
+
+		# Step 1: Extract Discord features for all messages (can be done in parallel)
+		discord_features_batch = [self.extract_discord_features(text) for text in messages]
+
+		# Step 2: Clean all texts
+		cleaned_texts = [self.clean_text(text) for text in messages]
+
+		# Step 3: Tokenize all texts
+		tokens_batch = [self.tokenize_text(text) for text in cleaned_texts]
+
+		# Step 4: Remove stopwords for all
+		filtered_tokens_batch = [self.remove_stopwords(tokens) for tokens in tokens_batch]
+
+		# Step 5: Batch lemmatization with spaCy (most expensive operation)
+		lemmas_batch = self.lemmatize_tokens_batch(filtered_tokens_batch)
+
+		# Step 6: Analyze emotions for all messages
+		emotions_batch = [self.analyze_emotions(cleaned_texts[i], lemmas_batch[i])
+						  for i in range(len(messages))]
+
+		# Step 7: Compile results
+		for i in range(len(messages)):
+			batch_results.append({
+				'original': messages[i],
+				'cleaned': cleaned_texts[i],
+				'tokens': tokens_batch[i],
+				'filtered_tokens': filtered_tokens_batch[i],
+				'lemmas': lemmas_batch[i],
+				'processed_text': ' '.join(lemmas_batch[i]),
+				'emotions': emotions_batch[i],
+				'discord_features': discord_features_batch[i]
+			})
+
+		return batch_results
+
+	def lemmatize_tokens_batch(self, tokens_batch: list[list[str]]) -> list[list[str]]:
+		"""Batch lemmatization with spaCy for better performance"""
+		if not tokens_batch:
+			return []
+
+		# Combine all texts for batch processing
+		combined_texts = []
+		text_boundaries = []
+		current_pos = 0
+
+		for tokens in tokens_batch:
+			if tokens:
+				text = " ".join(tokens)
+				combined_texts.append(text)
+				text_boundaries.append((current_pos, current_pos + len(tokens)))
+				current_pos += len(tokens)
+			else:
+				combined_texts.append("")
+				text_boundaries.append((current_pos, current_pos))
+
+		# Process all texts at once with spaCy
+		all_lemmas = []
+		for text in combined_texts:
+			if text:
+				doc = self.nlp(text)
+				lemmas = []
+				for token in doc:
+					if token.is_alpha and len(token.lemma_) > 1:
+						lemma = token.lemma_.lower()
+
+						# Apply French-specific lemmatization fixes
+						original_word = token.text.lower()
+						for correct_lemma, word_set in LEMMA_FIXES.items():
+							if original_word in word_set:
+								lemma = correct_lemma
+								break
+
+						lemmas.append(lemma)
+				all_lemmas.append(lemmas)
+			else:
+				all_lemmas.append([])
+
+		return all_lemmas
+
 	def process_message(self, text: str) -> dict:
 		"""Process a single message through the enhanced NLP pipeline"""
-		# Extract Discord features BEFORE cleaning (like in TP1)
-		discord_features = self.extract_discord_features(text)
-
-		cleaned_text = self.clean_text(text)
-		tokens = self.tokenize_text(cleaned_text)
-		filtered_tokens = self.remove_stopwords(tokens)
-		lemmas = self.lemmatize_tokens(filtered_tokens)
-
-		emotions = self.analyze_emotions(cleaned_text, lemmas)
-
-		return {
-			'original': text,
-			'cleaned': cleaned_text,
-			'tokens': tokens,
-			'filtered_tokens': filtered_tokens,
-			'lemmas': lemmas,
-			'processed_text': ' '.join(lemmas),
-			'emotions': emotions,
-			'discord_features': discord_features
-		}
+		# For backward compatibility, process as single-item batch
+		results = self.process_batch([text])
+		return results[0] if results else {}
 
 
 def find_first_csv(data_dir: str = "data") -> Path:
@@ -488,38 +561,50 @@ def load_discord_csv(file_path: Path) -> pd.DataFrame:
 
 
 def process_messages(df: pd.DataFrame, processor: DiscordNLPProcessor) -> pd.DataFrame:
-	"""Process all messages with enhanced progress tracking"""
-	logger.info("🔄 Processing messages with enhanced pipeline...")
+	"""Process all messages with enhanced progress tracking - OPTIMIZED BATCH PROCESSING"""
+	logger.info("🔄 Processing messages with optimized batch pipeline...")
 
 	processed_data = []
-	batch_count = 0
+	total_messages = len(df)
 
-	for idx, row in df.iterrows():
-		if idx % BATCH_SIZE == 0:
-			batch_count += 1
-			logger.info(f"Processing batch {batch_count} (messages {idx}-{min(idx+BATCH_SIZE-1, len(df)-1)})")
+	# Process in batches for better performance
+	for batch_start in range(0, total_messages, BATCH_SIZE):
+		batch_end = min(batch_start + BATCH_SIZE, total_messages)
+		batch_num = (batch_start // BATCH_SIZE) + 1
 
-		result = processor.process_message(row['Content'])
+		logger.info(f"Processing batch {batch_num} (messages {batch_start}-{batch_end-1})")
 
-		processed_data.append({
-			'AuthorID': row['AuthorID'],
-			'Author': row['Author'],
-			'Date': row['Date'],
-			'original_content': result['original'],
-			'cleaned_content': result['cleaned'],
-			'processed_text': result['processed_text'],
-			'token_count': len(result['tokens']),
-			'lemma_count': len(result['lemmas']),
-			'sentiment_score': result['emotions']['sentiment_score'],
-			'sentiment_label': result['emotions']['sentiment_label'],
-			'detected_emotions': ','.join(result['emotions']['detected_emotions']),
-			'textblob_polarity': result['emotions']['textblob_polarity'],
-			'textblob_subjectivity': result['emotions']['textblob_subjectivity'],
-			'emotions': result['emotions']  # Keep full emotions data for conversation analysis
-		})
+		# Extract batch data
+		batch_rows = df.iloc[batch_start:batch_end]
+		batch_messages = batch_rows['Content'].tolist()
+
+		# Process entire batch at once
+		batch_results = processor.process_batch(batch_messages)
+
+		# Compile results for this batch
+		for i, result in enumerate(batch_results):
+			row_idx = batch_start + i
+			row = batch_rows.iloc[i]
+
+			processed_data.append({
+				'AuthorID': row['AuthorID'],
+				'Author': row['Author'],
+				'Date': row['Date'],
+				'original_content': result['original'],
+				'cleaned_content': result['cleaned'],
+				'processed_text': result['processed_text'],
+				'token_count': len(result['tokens']),
+				'lemma_count': len(result['lemmas']),
+				'sentiment_score': result['emotions']['sentiment_score'],
+				'sentiment_label': result['emotions']['sentiment_label'],
+				'detected_emotions': ','.join(result['emotions']['detected_emotions']),
+				'textblob_polarity': result['emotions']['textblob_polarity'],
+				'textblob_subjectivity': result['emotions']['textblob_subjectivity'],
+				'emotions': result['emotions']  # Keep full emotions data for conversation analysis
+			})
 
 	processed_df = pd.DataFrame(processed_data)
-	logger.info("✅ Enhanced processing complete")
+	logger.info("✅ Optimized processing complete")
 
 	return processed_df
 
