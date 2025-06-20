@@ -6,4 +6,18 @@ spacy==3.8.7
 nltk==3.9.1
 
 # Sentiment analysis
-vaderSentiment>=3.3.2
+vaderSentiment==3.3.2
+
+# Machine Learning
+scikit-learn==1.7.0
+
+# Embeddings
+gensim==4.3.3
+
+# Deep Learning
+torch==2.7.1
+transformers==4.52.4
+
+# Visualization
+matplotlib==3.10.3
+seaborn==0.13.2
