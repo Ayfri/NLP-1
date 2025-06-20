@@ -93,6 +93,18 @@ This will:
 - Generate comparison visualizations
 - Save detailed results and reports
 
+### 📊 Embeddings Evaluation & Recommendation
+
+I ran an automated benchmark (`test_embeddings.py`) to compare four embedding strategies on clustering quality (silhouette score) and processing speed. The full methodology and numbers are in [`EMBEDDINGS_RAPPORT.md`](./EMBEDDINGS_RAPPORT.md).
+
+**TL;DR**
+
+| Best Quality | Best Speed | Balanced Choice |
+|--------------|-----------|-----------------|
+| **FastText** *(silhouette 0.54)* | **BoW / TF-IDF** *(< 0.1 s per 1 k msgs)* | **FastText** provides the best trade-off |
+
+I therefore default to **FastText** vectors for downstream conversation and sentiment analyses. Feel free to switch to Word2Vec when sub-second latency is critical, or to BERT variants if GPU resources are available and you need sentence-level semantics.
+
 ## Input Format
 
 CSV files should contain the following columns:
