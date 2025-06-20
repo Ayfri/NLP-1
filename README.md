@@ -160,6 +160,32 @@ Processed Messages → BoW/TF-IDF → Word2Vec+TF-IDF → FastText → BERT+ →
 
 Each step is optimized for processing large datasets with French/English multilingual support.
 
+## Technical Choices & Design Decisions
+
+Key technical decisions and their rationale:
+
+### Core Architecture
+- **spaCy + NLTK hybrid**: spaCy provides superior French linguistic models for lemmatization, while NLTK offers mature tokenization and the proven VADER sentiment lexicon for informal text
+- **French-first multilingual**: Discord conversations are primarily French, so prioritizing `fr_core_news_sm` ensures better accuracy while maintaining English fallback for mixed-language channels
+- **Batch processing**: Processing 2000 messages at once maximizes spaCy's efficiency while preventing memory overflow on large datasets
+
+### French Language Optimization
+- **Contractions handling**: French contractions (c'est, qu'il) break standard tokenizers, so custom expansion ensures proper word boundary detection and improves downstream analysis
+- **Contextual stopwords**: Standard French stopword lists remove semantically important words like "pas" (negation) and "ça", which are crucial for Discord sentiment analysis
+- **Pre-compiled regex**: Discord messages contain repetitive patterns (mentions, emojis), so compiling patterns once prevents performance degradation on large batches
+
+### Processing Strategy
+- **Multi-stage pipeline**: Sequential cleaning (Discord → contractions → normalization) ensures each step works on predictably formatted text, reducing edge cases
+- **VADER sentiment analysis**: Transformer models are overkill for Discord messages and too slow for real-time analysis; VADER handles informal language and emojis effectively
+- **Time-gap conversation detection**: Complex conversation threading is unreliable in Discord exports; 30-minute gaps capture natural conversation breaks without over-engineering
+
+### Design Philosophy
+- **Pandas-centric workflow**: CSV processing and analysis is pandas' strength; avoiding unnecessary data format conversions keeps the pipeline simple and debuggable
+- **Modular outputs**: Separate files allow users to analyze specific aspects (conversations vs. word frequency) without loading unnecessary data
+- **Graceful degradation**: Discord data is messy and models may be missing; fallback mechanisms ensure the pipeline never crashes on real-world data
+
+These choices prioritize speed, French accuracy, and maintainability for Discord conversation analysis.
+
 ## Embeddings Methods Details
 
 ### 1. BoW/TF-IDF (Traditional)
