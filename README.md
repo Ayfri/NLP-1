@@ -60,7 +60,7 @@ A comprehensive NLP pipeline for analyzing Discord messages with advanced text p
    ```
 4. Download NLTK data:
    ```bash
-   python -m nltk.downloader punkt_tab
+   python -c "import nltk; nltk.download('punkt_tab'); nltk.download('stopwords'); nltk.download('vader_lexicon')"
    ```
 
 ## Discord Export
