@@ -12,6 +12,8 @@ from collections import Counter
 
 # NLP imports
 import spacy
+from spacy.lang.fr import French
+from spacy.lang.en import English
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
@@ -92,7 +94,6 @@ logger = logging.getLogger(__name__)
 
 class DiscordNLPProcessor:
 	"""Enhanced Discord message processor with NLP pipeline"""
-	nlp: spacy.Language
 	french_stopwords: set[str]
 	english_stopwords: set[str]
 	contextual_stopwords: set[str]
@@ -122,9 +123,9 @@ class DiscordNLPProcessor:
 	def _download_nltk_data(self):
 		"""Download required NLTK data"""
 		try:
-			nltk.data.find('tokenizers/punkt')
+			nltk.data.find('tokenizers/punkt_tab')
 		except LookupError:
-			nltk.download('punkt')
+			nltk.download('punkt_tab')
 
 		try:
 			nltk.data.find('corpora/stopwords')
