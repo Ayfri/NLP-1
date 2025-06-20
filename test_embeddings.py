@@ -555,25 +555,25 @@ class EmbeddingsComparator:
 
 		# Create detailed report
 		report_lines = [
-			"# Rapport de Comparaison des Embeddings\n\n",
-			f"**Généré le :** {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n",
-			f"**Nombre de documents :** {len(self.texts)}\n",
-			f"**Paramètres de clustering :** {N_CLUSTERS} clusters\n\n",
-			"## 📊 Résultats Synthétiques\n\n",
-			"| Méthode | Dimension | Score Silhouette | Temps (s) | Notes |\n",
-			"|---------|-----------|------------------|-----------|-------|\n"
+			"# Embeddings Comparison Report\n\n",
+			f"**Generated on:** {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n",
+			f"**Number of documents:** {len(self.texts)}\n",
+			f"**Clustering parameters:** {N_CLUSTERS} clusters\n\n",
+			"## 📊 Summary Results\n\n",
+			"| Method | Dimension | Silhouette Score | Time (s) | Notes |\n",
+			"|--------|-----------|------------------|----------|-------|\n"
 		]
 
 		# Add table rows
 		for _, row in summary_df.iterrows():
-			sparsity_info = f" (Sparsité: {row['sparsity']:.2f})" if row['sparsity'] is not None else ""
+			sparsity_info = f" (Sparsity: {row['sparsity']:.2f})" if row['sparsity'] is not None else ""
 			report_lines.append(
 				f"| {row['method']} | {row['embedding_dim']} | {row['silhouette_score']:.3f} | "
 				f"{row['processing_time']:.2f} | {row['notes']}{sparsity_info} |\n"
 			)
 
 		report_lines.extend([
-			"\n## 🔍 Résultats Détaillés\n\n"
+			"\n## 🔍 Detailed Results\n\n"
 		])
 
 		# Add detailed results for each method
@@ -583,56 +583,56 @@ class EmbeddingsComparator:
 
 			if method == 'bow_tfidf':
 				report_lines.extend([
-					f"- **BoW Features :** {results['bow_features']}\n",
-					f"- **TF-IDF Features :** {results['tfidf_features']}\n",
-					f"- **BoW Silhouette Score :** {results['bow_silhouette_score']:.3f}\n",
-					f"- **TF-IDF Silhouette Score :** {results['tfidf_silhouette_score']:.3f}\n",
-					f"- **BoW Sparsity :** {results['bow_sparsity']:.3f}\n",
-					f"- **TF-IDF Sparsity :** {results['tfidf_sparsity']:.3f}\n",
+					f"- **BoW Features:** {results['bow_features']}\n",
+					f"- **TF-IDF Features:** {results['tfidf_features']}\n",
+					f"- **BoW Silhouette Score:** {results['bow_silhouette_score']:.3f}\n",
+					f"- **TF-IDF Silhouette Score:** {results['tfidf_silhouette_score']:.3f}\n",
+					f"- **BoW Sparsity:** {results['bow_sparsity']:.3f}\n",
+					f"- **TF-IDF Sparsity:** {results['tfidf_sparsity']:.3f}\n",
 				])
 			else:
 				for key, value in results.items():
 					key_formatted = key.replace('_', ' ').title()
 					if isinstance(value, float):
-						report_lines.append(f"- **{key_formatted} :** {value:.3f}\n")
+						report_lines.append(f"- **{key_formatted}:** {value:.3f}\n")
 					else:
-						report_lines.append(f"- **{key_formatted} :** {value}\n")
+						report_lines.append(f"- **{key_formatted}:** {value}\n")
 
 			report_lines.append("\n")
 
 		# Performance ranking
 		report_lines.extend([
-			"## 🏆 Classements de Performance\n\n",
-			"### Par Qualité de Clustering (Score Silhouette)\n\n"
+			"## 🏆 Performance Rankings\n\n",
+			"### By Clustering Quality (Silhouette Score)\n\n"
 		])
 
 		for i, (_, row) in enumerate(summary_df.iterrows()):
 			emoji = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "📍"
-			report_lines.append(f"{emoji} **{i + 1}. {row['method']}** : {row['silhouette_score']:.3f}\n")
+			report_lines.append(f"{emoji} **{i + 1}. {row['method']}**: {row['silhouette_score']:.3f}\n")
 
 		report_lines.extend([
-			"\n### Par Vitesse de Traitement\n\n"
+			"\n### By Processing Speed\n\n"
 		])
 
 		speed_ranking = summary_df.sort_values('processing_time')
 		for i, (_, row) in enumerate(speed_ranking.iterrows()):
 			emoji = "⚡" if i == 0 else "🚀" if i == 1 else "🏃" if i == 2 else "🐌"
-			report_lines.append(f"{emoji} **{i + 1}. {row['method']}** : {row['processing_time']:.2f}s\n")
+			report_lines.append(f"{emoji} **{i + 1}. {row['method']}**: {row['processing_time']:.2f}s\n")
 
 		# Add recommendations
 		best_quality = summary_df.iloc[0]
 		fastest = speed_ranking.iloc[0]
 
 		report_lines.extend([
-			"\n## 💡 Recommandations\n\n",
-			f"- **Meilleure qualité :** {best_quality['method']} (Score: {best_quality['silhouette_score']:.3f})\n",
-			f"- **Plus rapide :** {fastest['method']} ({fastest['processing_time']:.2f}s)\n",
-			f"- **Équilibré :** Considérer le compromis entre qualité et vitesse selon vos besoins\n\n",
-			"## 📈 Visualisations Générées\n\n",
-			"- `embeddings_performance_comparison.png` : Comparaison des temps de traitement et scores\n",
-			"- `embeddings_tsne_comparison.png` : Visualisations t-SNE pour chaque méthode\n",
-			"- `clustering_quality_comparison.png` : Comparaison des scores de qualité\n",
-			"- `embeddings_comparison_results.csv` : Résultats détaillés au format CSV\n"
+			"\n## 💡 Recommendations\n\n",
+			f"- **Best quality:** {best_quality['method']} (Score: {best_quality['silhouette_score']:.3f})\n",
+			f"- **Fastest:** {fastest['method']} ({fastest['processing_time']:.2f}s)\n",
+			f"- **Balanced:** Consider the trade-off between quality and speed based on your needs\n\n",
+			"## 📈 Generated Visualizations\n\n",
+			"- `embeddings_performance_comparison.png`: Processing time and score comparison\n",
+			"- `embeddings_tsne_comparison.png`: t-SNE visualizations for each method\n",
+			"- `clustering_quality_comparison.png`: Quality score comparison\n",
+			"- `embeddings_comparison_results.csv`: Detailed results in CSV format\n"
 		])
 
 		# Save report
