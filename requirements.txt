@@ -18,6 +18,21 @@ gensim==4.3.3
 torch==2.7.1
 transformers==4.52.4
 
+# Model training acceleration
+accelerate==1.8.1
+datasets==3.6.0
+
+# Mixed precision training
+apex==0.9.10dev
+
+# Model evaluation metrics
+evaluate==0.4.4
+rouge-score==0.1.2
+sacrebleu==2.5.1
+
+# CUDA support (optional)
+# Install with: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
 # Visualization
 matplotlib==3.10.3
 seaborn==0.13.2
