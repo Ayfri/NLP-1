@@ -39,6 +39,12 @@ A comprehensive NLP pipeline for analyzing Discord messages with advanced text p
 - **Performance evaluation**: Clustering quality (silhouette score), processing time
 - **Visualizations**: t-SNE plots, performance comparisons
 
+### Machine Learning Models
+- **Sentiment Classification**: DistilBERT-based multilingual sentiment analysis
+- **Conversation Summarization**: DistilBART-powered automatic summary generation
+- **GPU Acceleration**: Automatic hardware detection with mixed precision training
+- **Fast Training**: Optimized configurations for rapid model development
+
 ## Requirements
 
 - Python 3.8+
@@ -93,6 +99,18 @@ This will:
 - Generate comparison visualizations
 - Save detailed results and reports
 
+### Machine Learning Models Training
+For advanced sentiment classification and conversation summarization:
+```bash
+python test_models.py
+```
+
+This will:
+- Train DistilBERT for sentiment classification
+- Train DistilBART for conversation summarization
+- Automatically detect and use GPU if available
+- Generate comprehensive evaluation reports
+
 ### 📊 Embeddings Evaluation & Recommendation
 
 I ran an automated benchmark (`test_embeddings.py`) to compare four embedding strategies on clustering quality (silhouette score) and processing speed. The full methodology and numbers are in [`EMBEDDINGS_RAPPORT.md`](./EMBEDDINGS_RAPPORT.md).
@@ -104,6 +122,15 @@ I ran an automated benchmark (`test_embeddings.py`) to compare four embedding st
 | **FastText** *(silhouette 0.54)* | **BoW / TF-IDF** *(< 0.1 s per 1 k msgs)* | **FastText** provides the best trade-off |
 
 I therefore default to **FastText** vectors for downstream conversation and sentiment analyses. Feel free to switch to Word2Vec when sub-second latency is critical, or to BERT variants if GPU resources are available and you need sentence-level semantics.
+
+### 🤖 Machine Learning Models Documentation
+
+For detailed information about the ML models used for sentiment classification and conversation summarization, including model selection rationale, training configurations, and performance expectations, see [`MODELS.md`](./MODELS.md).
+
+**Key highlights:**
+- **Fast training**: 2-10 minutes on GPU, optimized for Discord data
+- **Multilingual support**: Handles French/English code-switching
+- **Automatic optimization**: GPU detection with mixed precision training
 
 ## Input Format
 
