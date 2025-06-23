@@ -24,6 +24,7 @@ from transformers.trainer import Trainer
 from transformers.trainer_seq2seq import Seq2SeqTrainer
 from transformers.training_args import TrainingArguments
 from transformers.training_args_seq2seq import Seq2SeqTrainingArguments
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -169,30 +170,88 @@ def prepare_sentiment_data(df, test_size=0.2, max_samples=2000):  # Increased fo
 
 	return train_texts, test_texts, train_labels, test_labels
 
-def prepare_conversation_data(conversations_file="output/conversations_analysis.csv", test_size=0.2, max_samples=200):  # Increased for GPU
-	"""Prepare data for conversation summarization"""
-	logger.info("📈 Preparing conversation data...")
+def prepare_conversation_data(conversations_file="output/conversations_analysis.csv", messages_file="output/messages_processed.csv", test_size=0.2, max_samples=200):
+	"""Prepare data for conversation summarization using real French messages"""
+	logger.info("📈 Preparing conversation data with real messages...")
 
 	if not os.path.exists(conversations_file):
 		logger.warning(f"⚠️ Conversations file not found: {conversations_file}")
 		return None, None, None, None
 
-	df = pd.read_csv(conversations_file)
-	df = df.dropna(subset=['key_topics', 'top_participants'])
+	if not os.path.exists(messages_file):
+		logger.warning(f"⚠️ Messages file not found: {messages_file}")
+		return None, None, None, None
+
+	# Load conversations metadata
+	conv_df = pd.read_csv(conversations_file)
+	conv_df = conv_df.dropna(subset=['key_topics', 'top_participants'])
+
+	# Load messages
+	msg_df = pd.read_csv(messages_file)
+
+	# Ensure Date column is datetime
+	if 'Date' in msg_df.columns:
+		msg_df['Date'] = pd.to_datetime(msg_df['Date'], format='mixed', utc=True)
 
 	# Limit dataset size for faster training
-	if len(df) > max_samples:
-		df = df.sample(n=max_samples, random_state=42)
+	if len(conv_df) > max_samples:
+		conv_df = conv_df.sample(n=max_samples, random_state=42)
 		logger.info(f"📉 Dataset reduced to {max_samples} samples for faster training")
 
-	# Use top participants + duration info as input and key topics as summary
-	# Create a synthetic "conversation description" from available data
+	# Extract real conversation text for each conversation
 	conversations = []
-	for _, row in df.iterrows():
-		conv_desc = f"Conversation between {row['top_participants']} lasted {row['duration_minutes']:.1f} minutes with {row['message_count']} messages. Dominant emotion: {row['dominant_emotion']}. Sentiment: {row['avg_sentiment_score']:.3f}"
-		conversations.append(conv_desc)
+	summaries = []
 
-	summaries = df['key_topics'].tolist()
+	for _, conv_row in conv_df.iterrows():
+		try:
+			# Get messages for this conversation period
+			if 'start_time' in conv_row and 'end_time' in conv_row:
+				start_time = pd.to_datetime(conv_row['start_time'], utc=True)
+				end_time = pd.to_datetime(conv_row['end_time'], utc=True)
+
+				conv_messages = msg_df[
+					(msg_df['Date'] >= start_time) &
+					(msg_df['Date'] <= end_time)
+				].copy()
+			else:
+				# Fallback: use sample messages
+				conv_messages = msg_df.sample(min(20, len(msg_df)), random_state=42)
+
+			if len(conv_messages) < 5:  # Skip conversations that are too short
+				continue
+
+			# Build conversation text from real messages
+			conv_text = ""
+			for _, msg in conv_messages.head(30).iterrows():  # Limit to 30 messages max
+				if pd.notna(msg['original_content']):
+					content = str(msg['original_content']).strip()
+					# Clean content
+					content = re.sub(r'http[s]?://\S+', '', content)  # Remove URLs
+					content = re.sub(r'<@\d+>', '', content)  # Remove Discord mentions
+					content = re.sub(r'@\w+', '', content)  # Remove @ mentions
+					content = ' '.join(content.split())  # Clean whitespace
+
+					if len(content) > 10:  # Only add meaningful content
+						conv_text += f"{content}. "
+
+			if len(conv_text) > 50:  # Only include conversations with enough content
+				conversations.append(conv_text[:1000])  # Limit length for training
+				# Use key_topics as summary but clean it up
+				summary = str(conv_row['key_topics']).replace(',', ', ')
+				summaries.append(f"Sujets principaux: {summary}")
+
+		except Exception as e:
+			logger.warning(f"Error processing conversation: {e}")
+			continue
+
+	if len(conversations) < 10:
+		logger.warning("⚠️ Not enough valid conversations found, using synthetic data")
+		# Fallback to original method but in French
+		conversations = []
+		for _, row in conv_df.iterrows():
+			conv_desc = f"Discussion entre {row['top_participants']} qui a duré {row['duration_minutes']:.1f} minutes avec {row['message_count']} messages. Émotion dominante: {row['dominant_emotion']}."
+			conversations.append(conv_desc)
+		summaries = [f"Sujets: {topics}" for topics in conv_df['key_topics'].tolist()]
 
 	train_conv, test_conv, train_summ, test_summ = train_test_split(
 		conversations, summaries, test_size=test_size, random_state=42
@@ -201,6 +260,7 @@ def prepare_conversation_data(conversations_file="output/conversations_analysis.
 	logger.info(f"📊 Conversations prepared:")
 	logger.info(f" - Training: {len(train_conv)}")
 	logger.info(f" - Test: {len(test_conv)}")
+	logger.info(f" - Using real message content: {len([c for c in conversations if len(c) > 200])}/{len(conversations)}")
 
 	return train_conv, test_conv, train_summ, test_summ
 
@@ -224,9 +284,9 @@ def setup_sentiment_model(model_name="distilbert-base-multilingual-cased"):
 	logger.info("✅ Fast sentiment model configured")
 	return model, tokenizer
 
-def setup_summarization_model(model_name="sshleifer/distilbart-cnn-6-6"):
-	"""Configure summarization model (lightweight version)"""
-	logger.info(f"🤖 Loading lightweight summarization model: {model_name}")
+def setup_summarization_model(model_name="google/mt5-small"):
+	"""Configure summarization model (multilingual version for French)"""
+	logger.info(f"🤖 Loading multilingual summarization model: {model_name}")
 
 	tokenizer = AutoTokenizer.from_pretrained(model_name)
 	model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
@@ -237,7 +297,7 @@ def setup_summarization_model(model_name="sshleifer/distilbart-cnn-6-6"):
 	if tokenizer.pad_token is None:
 		tokenizer.pad_token = tokenizer.eos_token
 
-	logger.info("✅ Lightweight summarization model configured")
+	logger.info("✅ Multilingual summarization model configured")
 	return model, tokenizer
 
 def train_sentiment_model(train_dataset, test_dataset, model, tokenizer, output_dir="./models/sentiment"):
