@@ -23,7 +23,8 @@ accelerate==1.8.1
 datasets==3.6.0
 
 # Mixed precision training
-apex==0.9.10dev
+# apex==0.9.10dev  # Removed due to Windows compatibility issues
+# Use PyTorch's built-in AMP instead: torch.cuda.amp.autocast() and torch.cuda.amp.GradScaler()
 
 # Model evaluation metrics
 evaluate==0.4.4
