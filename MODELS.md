@@ -26,7 +26,7 @@ Long Discord conversations can span hundreds of messages across multiple topics.
 | Task | Model | Why This Choice |
 |------|-------|----------------|
 | **Sentiment** | `distilbert-base-multilingual-cased` | • Lightweight version of BERT for faster training<br>• Multilingual support handles French/English code-switching<br>• Maintains good accuracy while being 2x faster than full BERT |
-| **Summarization** | `sshleifer/distilbart-cnn-6-6` | • Compressed version of BART-CNN with 6 encoder/decoder layers<br>• Optimized for speed without major accuracy loss<br>• Perfect balance for Discord conversation summarization |
+| **Summarization** | `google/mt5-small` | • Multilingual T5 model optimized for French content<br>• Better handling of French conversations than English-only models<br>• Smaller size maintains training speed while improving quality |
 
 ### Library Choices
 
@@ -108,14 +108,16 @@ DiscordConversationDataset(max_input_length=256, max_target_length=64)
 - **Volume**: Up to 2000 samples (automatically reduced on CPU)
 
 **Conversation Summarization:**
-- **Input**: Synthetic conversation descriptions combining:
-  - `top_participants` (most active users)
-  - `duration_minutes` + `message_count` (conversation scale)
-  - `dominant_emotion` + `avg_sentiment_score` (emotional context)
-- **Target**: `key_topics` (top 5 most frequent words from conversation)
-- **Volume**: Up to 200 conversations (automatically reduced on CPU)
+- **Input**: Real French conversation content from Discord messages including:
+  - `original_content` (actual message text from conversation periods)
+  - Automatic cleaning of URLs, mentions, and Discord formatting
+  - Intelligent truncation at sentence boundaries (max 1000 chars)
+  - French language prefix to guide model understanding
+- **Target**: `key_topics` formatted as "Sujets principaux: topic1, topic2, ..."
+- **Volume**: Up to 200 conversations with real message content
+- **Fallback**: Synthetic French descriptions when insufficient real content available
 
-The datasets use shorter sequence lengths (128/256 tokens) for faster processing while maintaining sufficient context for Discord messages. Summarization generates concise 64-token summaries from conversation metadata rather than raw message content.
+The datasets use shorter sequence lengths (128/256 tokens) for faster processing while maintaining sufficient context for Discord messages. Summarization now generates concise summaries from real French conversation content with intelligent preprocessing and multilingual model support.
 
 ### Output Structure
 ```
@@ -174,3 +176,38 @@ Training automatically detects GPU availability and adjusts parameters according
 | GPU dependency for speed | Much slower training on CPU only | Consider cloud GPU instances for training |
 
 Each limitation represents a speed-accuracy tradeoff that can be adjusted based on specific requirements and available computational resources.
+
+## 9. Recent Improvements (2025)
+
+### Summary Generation Issues Fixed
+The original implementation had several critical issues that produced poor French summaries:
+
+| **Previous Problem** | **Solution Implemented** |
+|---------------------|--------------------------|
+| ❌ English-only model (`distilbart-cnn-6-6`) | ✅ Multilingual model (`google/mt5-small`) |
+| ❌ Synthetic English metadata as input | ✅ Real French conversation messages |
+| ❌ Truncated messages (100 chars) | ✅ Smart truncation at sentence boundaries |
+| ❌ No text cleaning (URLs, mentions) | ✅ Automatic cleaning with regex patterns |
+| ❌ No language context | ✅ French prefix: "Résumé de conversation en français:" |
+
+### Enhanced Text Processing Pipeline
+```python
+# NEW: Intelligent conversation text preparation
+- Real message content extraction from time periods
+- URL/mention cleaning: http://... → [lien], @user → [mention]
+- Smart truncation at sentence boundaries (. ! ?)
+- French language context prefix for model guidance
+- Fallback quality detection and error handling
+```
+
+### Improved Generation Parameters
+```python
+# OPTIMIZED: Better generation settings for French
+max_length=80,          # Reduced from 150 for better quality
+min_length=15,          # Reduced from 20
+temperature=0.7,        # Added creativity parameter
+length_penalty=1.2,     # Encourage proper summary length
+# Quality detection: reject poor outputs
+```
+
+These improvements should resolve the English/French mixing and incoherent outputs previously observed.
