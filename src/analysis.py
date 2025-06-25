@@ -9,25 +9,28 @@ import logging
 from collections import Counter
 import matplotlib.pyplot as plt
 import os
+from typing import Any
 
 from .config import OUTPUT_DIR, FREQ_ANALYSIS_TOP_N, STATS_TOP_LEMMAS, DEFAULT_GAP_MINUTES
 
 logger = logging.getLogger(__name__)
 
 
-def analyze_conversations(df: pd.DataFrame, gap_minutes: int = DEFAULT_GAP_MINUTES,
-                         output_path: str = "output", verbose: bool = False) -> dict:
+def analyze_conversations(
+    df: pd.DataFrame,
+    gap_minutes: int = DEFAULT_GAP_MINUTES,
+    output_path: str = "output",
+    verbose: bool = False
+) -> dict[str, Any]:
     """
     Analyze conversation patterns and generate statistics.
 
-    Args:
-        df: DataFrame with conversation data
-        gap_minutes: Minutes gap to define conversation boundaries
-        output_path: Directory to save analysis results
-        verbose: Whether to print detailed information
+    :param df: DataFrame with conversation data
+    :param gap_minutes: Minutes gap to define conversation boundaries
+    :param output_path: Directory to save analysis results
+    :param verbose: Whether to print detailed information
 
-    Returns:
-        Dictionary with analysis results
+    :return: Dictionary with analysis results
     """
     if verbose:
         print(f"Starting conversation analysis with {gap_minutes}-minute gaps...")
@@ -54,7 +57,7 @@ def analyze_conversations(df: pd.DataFrame, gap_minutes: int = DEFAULT_GAP_MINUT
     return stats
 
 
-def identify_conversations(df: pd.DataFrame, gap_minutes: int) -> list[dict]:
+def identify_conversations(df: pd.DataFrame, gap_minutes: int) -> list[dict[str, Any]]:
     """Identify conversation sessions based on time gaps."""
     conversations = []
     current_conv = None
@@ -94,7 +97,7 @@ def identify_conversations(df: pd.DataFrame, gap_minutes: int) -> list[dict]:
     return conversations
 
 
-def calculate_conversation_stats(conversations: list[dict], df: pd.DataFrame) -> dict:
+def calculate_conversation_stats(conversations: list[dict[str, Any]], df: pd.DataFrame) -> dict[str, Any]:
     """Calculate detailed conversation statistics."""
     if not conversations:
         return {}
@@ -133,7 +136,7 @@ def calculate_conversation_stats(conversations: list[dict], df: pd.DataFrame) ->
     }
 
 
-def calculate_participant_activity(df: pd.DataFrame) -> dict:
+def calculate_participant_activity(df: pd.DataFrame) -> dict[str, Any]:
     """Calculate participant activity statistics."""
     participant_counts = df['Author'].value_counts()
 
@@ -145,7 +148,7 @@ def calculate_participant_activity(df: pd.DataFrame) -> dict:
     }
 
 
-def calculate_temporal_patterns(df: pd.DataFrame) -> dict:
+def calculate_temporal_patterns(df: pd.DataFrame) -> dict[str, Any]:
     """Analyze temporal conversation patterns."""
     df['hour'] = df['datetime'].dt.hour
     df['day_of_week'] = df['datetime'].dt.day_name()
@@ -164,8 +167,12 @@ def calculate_temporal_patterns(df: pd.DataFrame) -> dict:
     }
 
 
-def create_visualizations(conversations: list[dict], df: pd.DataFrame,
-                         output_path: str, verbose: bool = False) -> None:
+def create_visualizations(
+    conversations: list[dict[str, Any]],
+    df: pd.DataFrame,
+    output_path: str,
+    verbose: bool = False
+) -> None:
     """Create and save visualization charts."""
     if verbose:
         print("Generating visualizations...")
@@ -213,7 +220,11 @@ def create_visualizations(conversations: list[dict], df: pd.DataFrame,
     plt.close()
 
 
-def save_conversation_analysis(conversations: list[dict], stats: dict, output_path: str) -> None:
+def save_conversation_analysis(
+    conversations: list[dict[str, Any]],
+    stats: dict[str, Any],
+    output_path: str
+) -> None:
     """Save detailed conversation analysis to files."""
     # Save conversation details
     conv_data = []
@@ -249,7 +260,7 @@ def save_conversation_analysis(conversations: list[dict], stats: dict, output_pa
         f.write(f"Most active day: {stats['temporal_patterns']['peak_day']}\n")
 
 
-def print_analysis_summary(stats: dict) -> None:
+def print_analysis_summary(stats: dict[str, Any]) -> None:
     """Print a summary of the analysis results."""
     print("\n=== CONVERSATION ANALYSIS RESULTS ===")
     print(f"Total conversations: {stats['total_conversations']}")
@@ -341,7 +352,7 @@ def save_results(processed_df: pd.DataFrame, output_dir: str = OUTPUT_DIR):
 	logger.info(f"  Average lemmas per message: {avg_lemmas:.1f}")
 
 	# Sentiment distribution
-	sentiment_counts = processed_df['sentiment_label'].value_counts()
+	processed_df['sentiment_label'].value_counts()
 
 	# Word frequency analysis
 	if len(non_empty_df) > 0:

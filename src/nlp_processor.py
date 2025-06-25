@@ -13,7 +13,7 @@ from nltk.sentiment import SentimentIntensityAnalyzer
 
 from .config import (
 	REGEX_PATTERNS, CONTRACTION_PATTERNS, MIN_TOKEN_LENGTH, MAX_TOKEN_LENGTH,
-	IMPORTANT_SHORT_WORDS, CONTEXTUAL_WORDS_TO_KEEP, BATCH_SIZE
+	IMPORTANT_SHORT_WORDS, CONTEXTUAL_WORDS_TO_KEEP
 )
 
 logger = logging.getLogger(__name__)

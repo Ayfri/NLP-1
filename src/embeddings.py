@@ -14,7 +14,7 @@ from gensim.models.fasttext import FastText as FastTextModel
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import normalize
-from typing import cast
+from typing import Any, cast
 
 from .config import FASTTEXT_CONFIG, MIN_WORDS_FOR_EMBEDDINGS
 from .data_loaders import NLPDataLoader
@@ -58,11 +58,9 @@ class FastTextEmbedder:
 		"""
 		Generate document embeddings using PyTorch DataLoader
 
-		Parameters:
-			texts: List of texts to embed (uses self.texts if None)
+		:param texts: List of texts to embed (uses self.texts if None)
 
-		Returns:
-			Normalized embeddings array
+		:return: Normalized embeddings array
 		"""
 		if self.model is None:
 			raise ValueError("Model not trained. Call train() first.")
@@ -166,7 +164,7 @@ class FastTextEmbedder:
 
 		return results
 
-	def cluster_texts(self, n_clusters: int = 5) -> tuple[np.ndarray, dict]:
+	def cluster_texts(self, n_clusters: int = 5) -> tuple[np.ndarray, dict[int, dict[str, Any]]]:
 		"""Cluster texts using K-means on embeddings"""
 		if self.embeddings is None:
 			raise ValueError("Embeddings not available. Generate embeddings first.")
