@@ -7,7 +7,8 @@ A complete NLP pipeline for analyzing Discord conversations, designed for educat
 - **Text processing**: Cleaning, tokenization, lemmatization with spaCy
 - **Sentiment analysis**: Positive/negative/neutral classification using VADER
 - **Conversation analysis**: Automatic detection and metrics per conversation
-- **FastText embeddings**: Optimized vector representations for social media text with L2 normalization
+- **FastText embeddings**: Optimized vector representations with L2 normalization
+- **PyTorch DataLoaders**: Efficient batch processing for large datasets
 - **Multilingual support**: French and English
 
 ## Installation
@@ -20,7 +21,7 @@ python -m spacy download fr_core_news_sm
 ## Usage
 
 ```bash
-# Basic processing
+# Basic processing (uses PyTorch DataLoaders by default)
 python main.py
 
 # With options
@@ -40,17 +41,24 @@ python test_embeddings.py
 - `--no-embeddings`: Skip FastText generation
 - `--no-conversations`: Skip conversation analysis
 - `--verbose, -v`: Verbose mode
-- `--gap-minutes`: Conversation detection threshold in minutes (default: 30)
+- `--gap-minutes`: Conversation detection threshold in minutes (default: 10)
 
 ## Output files
 
-- `messages_processed.csv`: Processed messages with NLP results
+- `processed_messages.csv`: Processed messages with NLP results
 - `conversations_analysis.csv`: Detailed conversation analysis
 - `conversation_summary.csv`: Global summary
 - `lemma_frequency.csv`: Lemma frequency analysis (top 100)
 - `fasttext_model.bin`: Trained FastText model
 - `embeddings.pkl`: Document vectors
 - `text_clusters.csv`: Message clustering
+
+## Performance
+
+The pipeline uses PyTorch DataLoaders for efficient batch processing:
+- Automatic GPU detection and usage when available
+- Memory-efficient processing for large datasets
+- Optimized batch sizes for improved performance
 
 ## Notes
 

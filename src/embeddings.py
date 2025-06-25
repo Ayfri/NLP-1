@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import logging
-from typing import Optional
 import pickle
 
 from gensim.models import FastText
@@ -18,6 +17,7 @@ from sklearn.preprocessing import normalize
 from typing import cast
 
 from .config import FASTTEXT_CONFIG, MIN_WORDS_FOR_EMBEDDINGS
+from .data_loaders import NLPDataLoader
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +28,14 @@ class FastTextEmbedder:
 	def __init__(self, config: dict = FASTTEXT_CONFIG):
 		"""Initialize the embedder with configuration"""
 		self.config = config
-		self.model: Optional[FastTextModel] = None
-		self.embeddings: Optional[np.ndarray] = None
+		self.model: FastTextModel | None = None
+		self.embeddings: np.ndarray | None = None
 		self.texts: list[str] = []
 
 	def train(self, texts: list[str]) -> None:
 		"""Train FastText model on the provided texts"""
 		logger.info("Training FastText model...")
 
-		# No need to filter again - texts are already filtered in the pipeline
 		if len(texts) < 10:
 			logger.warning("Insufficient texts for training embeddings")
 			return
@@ -55,39 +54,50 @@ class FastTextEmbedder:
 
 		logger.info(f"FastText model trained on {len(texts)} texts, vocab: {len(self.model.wv.key_to_index)}")
 
-	def generate_embeddings(self, texts: Optional[list[str]] = None) -> np.ndarray:
-		"""Generate document embeddings using trained model"""
+	def generate_embeddings(self, texts: list[str] | None = None) -> np.ndarray:
+		"""
+		Generate document embeddings using PyTorch DataLoader
+
+		Parameters:
+			texts: List of texts to embed (uses self.texts if None)
+
+		Returns:
+			Normalized embeddings array
+		"""
 		if self.model is None:
 			raise ValueError("Model not trained. Call train() first.")
 
 		if texts is None:
 			texts = self.texts
 
-		logger.info(f"Generating embeddings for {len(texts)} documents...")
+		logger.info(f"Generating embeddings for {len(texts)} documents using DataLoader...")
+
+		dataloader_manager = NLPDataLoader()
+		dataloader = dataloader_manager.create_embedding_dataloader(texts)
 
 		doc_embeddings = []
-		for text in texts:
-			words = text.split()
-			word_vectors = []
 
-			for word in words:
-				if word in self.model.wv:
-					word_vectors.append(self.model.wv[word])
+		for batch_idx, batch in enumerate(dataloader):
+			if batch_idx % 10 == 0:
+				logger.info(f"Processing embedding batch {batch_idx + 1}/{len(dataloader)}...")
 
-			if word_vectors:
-				# Average word vectors to create document embedding
-				doc_embedding = np.mean(word_vectors, axis=0)
-			else:
-				# Fallback to zero vector
-				doc_embedding = np.zeros(self.config['vector_size'])
+			batch_embeddings = []
+			for text in batch['texts']:
+				words = text.split()
+				word_vectors = [self.model.wv[word] for word in words if word in self.model.wv]
 
-			doc_embeddings.append(doc_embedding)
+				if word_vectors:
+					doc_embedding = np.mean(word_vectors, axis=0)
+				else:
+					doc_embedding = np.zeros(self.config['vector_size'])
+
+				batch_embeddings.append(doc_embedding)
+
+			doc_embeddings.extend(batch_embeddings)
 
 		self.embeddings = np.array(doc_embeddings)
-
-		# Normalize embeddings using L2 normalization
 		self.embeddings = cast(np.ndarray, normalize(self.embeddings, norm='l2'))
-		logger.info(f"Generated and normalized embeddings: {self.embeddings.shape}")
+		logger.info(f"✅ Generated and normalized embeddings: {self.embeddings.shape}")
 
 		return self.embeddings
 
@@ -185,7 +195,7 @@ def create_embeddings_pipeline(processed_df: pd.DataFrame, output_dir: str = "ou
 	"""Create complete embeddings pipeline"""
 	logger.info("🚀 Starting embeddings pipeline...")
 
-	# Prepare texts - filter for non-empty and sufficient length
+	# Prepare texts
 	non_empty_df = processed_df[
 		(processed_df['processed_text'].notna()) &
 		(processed_df['processed_text'] != '')
@@ -235,7 +245,7 @@ def create_embeddings_pipeline(processed_df: pd.DataFrame, output_dir: str = "ou
 	# Perform clustering analysis
 	labels, cluster_stats = embedder.cluster_texts()
 
-	# Save clustering results - now labels and clustering_df have same length
+	# Save clustering results
 	clustering_df['cluster'] = labels
 
 	clustering_file = output_path / "text_clusters.csv"

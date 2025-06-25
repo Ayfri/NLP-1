@@ -11,9 +11,10 @@ from pathlib import Path
 
 from src.config import DEFAULT_DATA_PATH, DEFAULT_OUTPUT_PATH, DEFAULT_GAP_MINUTES
 from src.utils import load_discord_csv, find_first_csv
-from src.nlp_processor import DiscordNLPProcessor, process_messages
+from src.nlp_processor import DiscordNLPProcessor
 from src.embeddings import FastTextEmbedder
 from src.analysis import analyze_conversations
+from src.data_loaders import process_messages_with_dataloader
 
 
 def parse_arguments():
@@ -108,12 +109,12 @@ def main():
 		if args.verbose:
 			print(f"Loaded {len(df)} messages")
 
-		# Process messages with NLP
+		# Process messages with NLP using DataLoader
 		if args.verbose:
-			print("Processing messages...")
+			print("Processing messages using DataLoader...")
 
 		processor = DiscordNLPProcessor()
-		processed_df = process_messages(df, processor)
+		processed_df = process_messages_with_dataloader(df, processor)
 
 		# Save processed data
 		processed_df.to_csv(os.path.join(args.output, "processed_messages.csv"), index=False)
@@ -133,7 +134,7 @@ def main():
 				# Train FastText model
 				embedder.train(valid_texts)
 
-				# Generate embeddings for the same texts
+				# Generate embeddings using DataLoader
 				embeddings = embedder.generate_embeddings(valid_texts)
 
 				# Perform clustering
