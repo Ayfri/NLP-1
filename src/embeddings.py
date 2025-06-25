@@ -14,6 +14,8 @@ from gensim.models import FastText
 from gensim.models.fasttext import FastText as FastTextModel
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
+from sklearn.preprocessing import normalize
+from typing import cast
 
 from .config import FASTTEXT_CONFIG, MIN_WORDS_FOR_EMBEDDINGS
 
@@ -82,7 +84,10 @@ class FastTextEmbedder:
 			doc_embeddings.append(doc_embedding)
 
 		self.embeddings = np.array(doc_embeddings)
-		logger.info(f"Generated embeddings: {self.embeddings.shape}")
+
+		# Normalize embeddings using L2 normalization
+		self.embeddings = cast(np.ndarray, normalize(self.embeddings, norm='l2'))
+		logger.info(f"Generated and normalized embeddings: {self.embeddings.shape}")
 
 		return self.embeddings
 
@@ -96,7 +101,7 @@ class FastTextEmbedder:
 
 	def load_model(self, file_path: str) -> None:
 		"""Load a pre-trained model"""
-		self.model = FastText.load(file_path)
+		self.model = cast(FastTextModel, FastText.load(file_path))
 		logger.info(f"Model loaded from {file_path}")
 
 	def save_embeddings(self, file_path: str) -> None:
@@ -133,6 +138,9 @@ class FastTextEmbedder:
 			return []
 
 		query_embedding = np.mean(query_vectors, axis=0).reshape(1, -1)
+
+		# Normalize query embedding to match stored embeddings
+		query_embedding = cast(np.ndarray, normalize(query_embedding, norm='l2'))
 
 		# Calculate similarities
 		similarities = cosine_similarity(query_embedding, self.embeddings)[0]

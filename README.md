@@ -7,7 +7,7 @@ A complete NLP pipeline for analyzing Discord conversations, designed for educat
 - **Text processing**: Cleaning, tokenization, lemmatization with spaCy
 - **Sentiment analysis**: Positive/negative/neutral classification using VADER
 - **Conversation analysis**: Automatic detection and metrics per conversation
-- **FastText embeddings**: Optimized vector representations for social media text
+- **FastText embeddings**: Optimized vector representations for social media text with L2 normalization
 - **Multilingual support**: French and English
 
 ## Installation
