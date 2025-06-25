@@ -25,20 +25,6 @@ def parse_arguments():
 	)
 
 	parser.add_argument(
-		"--data", "-d",
-		type=str,
-		default=DEFAULT_DATA_PATH,
-		help="Path to conversation data directory"
-	)
-
-	parser.add_argument(
-		"--output", "-o",
-		type=str,
-		default=DEFAULT_OUTPUT_PATH,
-		help="Output directory for results"
-	)
-
-	parser.add_argument(
 		"--no-embeddings",
 		action="store_true",
 		help="Skip FastText embeddings generation"
@@ -77,17 +63,21 @@ def main():
 	"""Main execution function."""
 	args = parse_arguments()
 
+	# Use hardcoded paths
+	data_path = DEFAULT_DATA_PATH
+	output_path = DEFAULT_OUTPUT_PATH
+
 	if args.verbose:
 		print("=== NLP Conversation Analysis Tool ===")
-		print(f"Data path: {args.data}")
-		print(f"Output path: {args.output}")
+		print(f"Data path: {data_path}")
+		print(f"Output path: {output_path}")
 
 	# Setup output directory
-	setup_output_directory(args.output, args.verbose)
+	setup_output_directory(output_path, args.verbose)
 
 	# Check if data directory exists
-	if not os.path.exists(args.data):
-		print(f"Error: Data directory '{args.data}' not found.")
+	if not os.path.exists(data_path):
+		print(f"Error: Data directory '{data_path}' not found.")
 		sys.exit(1)
 
 	try:
@@ -95,10 +85,10 @@ def main():
 		if args.verbose:
 			print("Loading conversation files...")
 
-		if args.data.endswith('.csv'):
-			csv_file = args.data
+		if data_path.endswith('.csv'):
+			csv_file = Path(data_path)
 		else:
-			csv_file = find_first_csv(args.data)
+			csv_file = find_first_csv(data_path)
 
 		df = load_discord_csv(csv_file)
 
@@ -117,7 +107,7 @@ def main():
 		processed_df = process_messages_with_dataloader(df, processor)
 
 		# Save processed data
-		processed_df.to_csv(os.path.join(args.output, "processed_messages.csv"), index=False)
+		processed_df.to_csv(os.path.join(output_path, "processed_messages.csv"), index=False)
 
 		# Generate FastText embeddings
 		if not args.no_embeddings:
@@ -141,8 +131,8 @@ def main():
 				cluster_labels, cluster_stats = embedder.cluster_texts(5)
 
 				# Save results
-				embedder.save_model(os.path.join(args.output, "fasttext_model.bin"))
-				embedder.save_embeddings(os.path.join(args.output, "embeddings.pkl"))
+				embedder.save_model(os.path.join(output_path, "fasttext_model.bin"))
+				embedder.save_embeddings(os.path.join(output_path, "embeddings.pkl"))
 
 				if args.verbose:
 					print(f"Generated {len(embeddings)} embeddings with {len(set(cluster_labels))} clusters")
@@ -157,7 +147,7 @@ def main():
 			stats = analyze_conversations(
 				df=processed_df,
 				gap_minutes=args.gap_minutes,
-				output_path=args.output,
+				output_path=output_path,
 				verbose=args.verbose
 			)
 

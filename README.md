@@ -25,7 +25,7 @@ python -m spacy download fr_core_news_sm
 python main.py
 
 # With options
-python main.py --data data/messages.csv --output results --verbose
+python main.py --verbose
 
 # Skip embeddings
 python main.py --no-embeddings --no-conversations
@@ -36,8 +36,6 @@ python test_embeddings.py
 
 ### Available options
 
-- `--data, -d`: Directory or CSV file (default: data/)
-- `--output, -o`: Output directory (default: output/)
 - `--no-embeddings`: Skip FastText generation
 - `--no-conversations`: Skip conversation analysis
 - `--verbose, -v`: Verbose mode
