@@ -10,6 +10,7 @@ from tqdm import tqdm
 from typing import Callable
 import pickle
 import os
+import argparse
 
 
 class SentimentDataset(Dataset):
@@ -139,65 +140,71 @@ def load_data(sample_size: int | None = None) -> pd.DataFrame:
 	return df
 
 
-def load_or_create_vocab_and_encoder(train_df: pd.DataFrame) -> tuple[LabelEncoder, dict[str, int], Callable[[str], list[int]]]:
+def load_or_create_vocab_and_encoder(train_df: pd.DataFrame, load_existing: bool = True) -> tuple[LabelEncoder, dict[str, int], Callable[[str], list[int]]]:
 	"""Load existing vocabulary and label encoder or create new ones"""
-	try:
-		# Try to load existing vocabulary and label encoder
-		with open('vocab.pkl', 'rb') as f:
-			vocab = pickle.load(f)
-		with open('label_encoder.pkl', 'rb') as f:
-			le = pickle.load(f)
-		print("Loaded existing vocabulary and label encoder")
+	# Ensure output directory exists
+	os.makedirs('output', exist_ok=True)
 
-		def simple_tokenizer(text: str) -> list[int]:
-			"""Simple tokenizer based on space separation"""
-			idxs = []
-			for w in text.lower().split():
-				token_id = vocab.get(w, 0)
-				# Extra safety: ensure token is in valid range
-				if token_id >= len(vocab):
-					token_id = 0
-				idxs.append(token_id)
-			return idxs
+	if load_existing:
+		try:
+			# Try to load existing vocabulary and label encoder
+			with open('output/vocab.pkl', 'rb') as f:
+				vocab = pickle.load(f)
+			with open('output/label_encoder.pkl', 'rb') as f:
+				le = pickle.load(f)
+			print("Loaded existing vocabulary and label encoder")
 
-		return le, vocab, simple_tokenizer
+			def simple_tokenizer(text: str) -> list[int]:
+				"""Simple tokenizer based on space separation"""
+				idxs = []
+				for w in text.lower().split():
+					token_id = vocab.get(w, 0)
+					# Extra safety: ensure token is in valid range
+					if token_id >= len(vocab):
+						token_id = 0
+					idxs.append(token_id)
+				return idxs
 
-	except FileNotFoundError:
-		print("Creating new vocabulary and label encoder...")
+			return le, vocab, simple_tokenizer
 
-		# Build simple vocabulary
-		vocab = {'<pad>': 0}
+		except FileNotFoundError:
+			print("No existing vocabulary found, creating new one...")
+	else:
+		print("Creating new vocabulary and label encoder (--no-load-vocab specified)...")
 
-		def simple_tokenizer(text: str) -> list[int]:
-			"""Simple tokenizer based on space separation"""
-			idxs = []
-			for w in text.lower().split():
-				if w not in vocab:
-					vocab[w] = len(vocab)
-				token_id = vocab[w]
-				# Extra safety: ensure token is in valid range (shouldn't happen but just in case)
-				if token_id < 0:
-					token_id = 0
-				idxs.append(token_id)
-			return idxs
+	# Build simple vocabulary
+	vocab = {'<pad>': 0}
 
-		# Build vocabulary on training set
-		for text in train_df['Comment']:
-			simple_tokenizer(text)
+	def simple_tokenizer(text: str) -> list[int]:
+		"""Simple tokenizer based on space separation"""
+		idxs = []
+		for w in text.lower().split():
+			if w not in vocab:
+				vocab[w] = len(vocab)
+			token_id = vocab[w]
+			# Extra safety: ensure token is in valid range (shouldn't happen but just in case)
+			if token_id < 0:
+				token_id = 0
+			idxs.append(token_id)
+		return idxs
 
-		print(f"Built vocabulary with {len(vocab)} tokens")
+	# Build vocabulary on training set
+	for text in train_df['Comment']:
+		simple_tokenizer(text)
 
-		# Create label encoder
-		le = LabelEncoder()
+	print(f"Built vocabulary with {len(vocab)} tokens")
 
-		# Save vocabulary (label encoder will be saved later in preprocess_data)
-		with open('vocab.pkl', 'wb') as f:
-			pickle.dump(vocab, f)
+	# Create label encoder
+	le = LabelEncoder()
 
-		return le, vocab, simple_tokenizer
+	# Save vocabulary (label encoder will be saved later in preprocess_data)
+	with open('output/vocab.pkl', 'wb') as f:
+		pickle.dump(vocab, f)
+
+	return le, vocab, simple_tokenizer
 
 
-def preprocess_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, LabelEncoder, dict[str, int], Callable[[str], list[int]]]:
+def preprocess_data(df: pd.DataFrame, load_existing_vocab: bool = True) -> tuple[pd.DataFrame, pd.DataFrame, LabelEncoder, dict[str, int], Callable[[str], list[int]]]:
 	"""Data preparation with tokenization and label encoding"""
 	print("Preprocessing data...")
 
@@ -220,7 +227,7 @@ def preprocess_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, Label
 		train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
 
 	# Load or create vocabulary and label encoder
-	le, vocab, simple_tokenizer = load_or_create_vocab_and_encoder(train_df)
+	le, vocab, simple_tokenizer = load_or_create_vocab_and_encoder(train_df, load_existing_vocab)
 
 	# Label encoding
 	df['label'] = le.fit_transform(df['Sentiment'])
@@ -237,7 +244,8 @@ def preprocess_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, Label
 	print(f"Label distribution: {df['label'].value_counts().sort_index().to_dict()}")
 
 	# Save label encoder
-	with open('label_encoder.pkl', 'wb') as f:
+	os.makedirs('output', exist_ok=True)
+	with open('output/label_encoder.pkl', 'wb') as f:
 		pickle.dump(le, f)
 
 	return train_df, val_df, le, vocab, simple_tokenizer
@@ -344,7 +352,8 @@ def train_model(
 			best_val_accuracy = val_accuracy
 			patience_counter = 0
 			# Save best model
-			torch.save(model.state_dict(), 'best_attention_model.pth')
+			os.makedirs('output', exist_ok=True)
+			torch.save(model.state_dict(), 'output/best_attention_model.pth')
 			print(f"New best accuracy: {val_accuracy:.4f}")
 		else:
 			patience_counter += 1
@@ -449,18 +458,57 @@ def test_model(review: str, model: SentimentClassifier, tokenizer: Callable[[str
 		print(f"Probabilities: {prob_dict}")
 
 
+def parse_args() -> argparse.Namespace:
+	"""Parse command line arguments"""
+	parser = argparse.ArgumentParser(description='Train sentiment classification model with RNN + Self-Attention')
+
+	parser.add_argument(
+		'--no-load-vocab',
+		action='store_true',
+		help='Create new vocabulary instead of loading existing one (default: load existing)'
+    )
+	parser.add_argument(
+		'--load-model',
+		action='store_true',
+		help='Load existing best model instead of training new one (default: train new)'
+    )
+	parser.add_argument(
+		'--sample-size',
+		type=int,
+		default=None,
+		help='Sample size for faster development (default: use full dataset)'
+    )
+	parser.add_argument(
+		'--epochs',
+		type=int,
+		default=6,
+		help='Number of training epochs (default: 6)'
+    )
+	parser.add_argument(
+		'--batch-size',
+		type=int,
+		default=64,
+		help='Batch size for training (default: 64)'
+    )
+
+	return parser.parse_args()
+
+
 def main() -> None:
 	"""Main function orchestrating training and evaluation"""
+	# Parse command line arguments
+	args = parse_args()
+
 	# Enable better CUDA error reporting
 	os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 	# Hyperparameters
 	embed_dim = 100
 	hidden_dim = 128
-	num_epochs = 6
-	batch_size = 64
+	num_epochs = args.epochs
+	batch_size = args.batch_size
 	max_len = 50
-	sample_size = None  # Use entire dataset or sample for rapid testing
+	sample_size = args.sample_size
 
 	# Device configuration
 	if torch.cuda.is_available():
@@ -473,7 +521,7 @@ def main() -> None:
 
 	# Data loading and preprocessing
 	df = load_data(sample_size=sample_size)
-	train_df, val_df, le, vocab, tokenizer = preprocess_data(df)
+	train_df, val_df, le, vocab, tokenizer = preprocess_data(df, load_existing_vocab=not args.no_load_vocab)
 
 	# Create DataLoaders
 	train_loader, val_loader = create_data_loaders(train_df, val_df, tokenizer, batch_size, max_len, device)
@@ -491,15 +539,24 @@ def main() -> None:
 	print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 	print(f"Training batches: {len(train_loader)}, Validation batches: {len(val_loader)}")
 
-	# Train model
-	train_model(model, optimizer, criterion, num_epochs, train_loader, val_loader, device)
+	# Load existing model or train new one
+	if args.load_model:
+		try:
+			model.load_state_dict(torch.load('output/best_attention_model.pth', weights_only=True))
+			print("Loaded existing best model (--load-model specified)")
+		except FileNotFoundError:
+			print("No existing model found, training new one...")
+			train_model(model, optimizer, criterion, num_epochs, train_loader, val_loader, device)
+	else:
+		# Train model
+		train_model(model, optimizer, criterion, num_epochs, train_loader, val_loader, device)
 
-	# Load best model
-	try:
-		model.load_state_dict(torch.load('best_attention_model.pth', weights_only=True))
-		print("Loaded best model")
-	except:
-		print("Could not load best model, using current model")
+		# Load best model after training
+		try:
+			model.load_state_dict(torch.load('output/best_attention_model.pth', weights_only=True))
+			print("Loaded best model")
+		except:
+			print("Could not load best model, using current model")
 
 	# Final evaluation
 	evaluate_model(model, criterion, val_loader, device, le)
