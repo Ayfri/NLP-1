@@ -301,9 +301,12 @@ def train_model(
 		for texts, labels in tqdm(train_loader, desc=f"Epoch {epoch}"):
 			texts, labels = texts.to(device), labels.to(device)
 
-			# Safety check for invalid indices
-			if labels.max() >= model.num_classes or labels.min() < 0 or texts.max() >= model.vocab_size or texts.min() < 0:
+			# Safety check and clamp invalid indices instead of skipping
+			if labels.max() >= model.num_classes or labels.min() < 0:
 				continue
+
+			# Clamp text indices to valid range instead of skipping
+			texts = torch.clamp(texts, 0, model.vocab_size - 1)
 
 			optimizer.zero_grad()
 			logits = model(texts)
@@ -330,9 +333,12 @@ def train_model(
 			for texts, labels in val_loader:
 				texts, labels = texts.to(device), labels.to(device)
 
-				# Safety check for invalid indices
-				if labels.max() >= model.num_classes or labels.min() < 0 or texts.max() >= model.vocab_size or texts.min() < 0:
+				# Safety check and clamp invalid indices instead of skipping
+				if labels.max() >= model.num_classes or labels.min() < 0:
 					continue
+
+				# Clamp text indices to valid range instead of skipping
+				texts = torch.clamp(texts, 0, model.vocab_size - 1)
 
 				logits = model(texts)
 				loss = criterion(logits, labels)
@@ -342,8 +348,14 @@ def train_model(
 				correct += (preds == labels).sum().item()
 				total += labels.size(0)
 
-		val_accuracy = correct / total
-		avg_val_loss = val_loss / total
+		# Protection against division by zero
+		if total > 0:
+			val_accuracy = correct / total
+			avg_val_loss = val_loss / total
+		else:
+			val_accuracy = 0.0
+			avg_val_loss = 0.0
+			print("Warning: No valid validation samples processed!")
 
 		print(f"Validation — Loss: {avg_val_loss:.4f}, Accuracy: {val_accuracy:.4f}")
 
@@ -380,9 +392,12 @@ def evaluate_model(model: SentimentClassifier, criterion: nn.Module, val_loader:
 		for texts, labels in val_loader:
 			texts, labels = texts.to(device), labels.to(device)
 
-			# Safety check for invalid indices
-			if labels.max() >= len(le.classes_) or labels.min() < 0 or texts.max() >= model.vocab_size or texts.min() < 0:
+			# Safety check and clamp invalid indices instead of skipping
+			if labels.max() >= len(le.classes_) or labels.min() < 0:
 				continue
+
+			# Clamp text indices to valid range instead of skipping
+			texts = torch.clamp(texts, 0, model.vocab_size - 1)
 
 			output = model(texts)
 			loss = criterion(output, labels)
@@ -401,8 +416,14 @@ def evaluate_model(model: SentimentClassifier, criterion: nn.Module, val_loader:
 				if predicted[i] == labels[i]:
 					class_correct[label] += 1
 
-	avg_loss = total_loss / total_samples
-	overall_accuracy = correct_predictions / total_samples
+	# Protection against division by zero
+	if total_samples > 0:
+		avg_loss = total_loss / total_samples
+		overall_accuracy = correct_predictions / total_samples
+	else:
+		avg_loss = 0.0
+		overall_accuracy = 0.0
+		print("Warning: No valid evaluation samples processed!")
 
 	# Create sentiment mapping for better display
 	sentiment_names = {0: "Negative", 1: "Neutral", 2: "Positive"}
@@ -551,12 +572,15 @@ def main() -> None:
 		# Train model
 		train_model(model, optimizer, criterion, num_epochs, train_loader, val_loader, device)
 
-		# Load best model after training
+	# Load best model after training (if it exists)
+	if os.path.exists('output/best_attention_model.pth'):
 		try:
 			model.load_state_dict(torch.load('output/best_attention_model.pth', weights_only=True))
 			print("Loaded best model")
-		except:
-			print("Could not load best model, using current model")
+		except Exception as e:
+			print(f"Could not load best model: {e}, using current model")
+	else:
+		print("No best model saved, using current model")
 
 	# Final evaluation
 	evaluate_model(model, criterion, val_loader, device, le)
