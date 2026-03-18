@@ -3,7 +3,7 @@ pandas==2.3.0
 
 # NLP libraries
 spacy==3.8.7
-nltk==3.9.1
+nltk==3.9.3
 
 # Sentiment analysis
 vaderSentiment==3.3.2
