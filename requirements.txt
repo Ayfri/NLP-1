@@ -3,7 +3,7 @@ pandas==2.3.0
 
 # NLP libraries
 spacy==3.8.7
-nltk==3.9.1
+nltk==3.9.4
 
 # Sentiment analysis
 vaderSentiment==3.3.2
@@ -15,8 +15,8 @@ scikit-learn==1.7.0
 gensim==4.3.3
 
 # Deep Learning
-torch==2.7.1
-transformers==4.52.4
+torch==2.8.0
+transformers==5.0.0rc3
 
 # Model training acceleration
 accelerate==1.8.1
